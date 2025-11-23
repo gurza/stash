@@ -16,3 +16,28 @@ type KeyInfo struct {
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 }
+
+// DBType represents the database type.
+type DBType int
+
+// Database type constants.
+const (
+	DBTypeSQLite DBType = iota
+	DBTypePostgres
+)
+
+// RWLocker is an interface for read-write locking.
+type RWLocker interface {
+	RLock()
+	RUnlock()
+	Lock()
+	Unlock()
+}
+
+// noopLocker implements RWLocker with no-op operations (for PostgreSQL).
+type noopLocker struct{}
+
+func (noopLocker) RLock()   {}
+func (noopLocker) RUnlock() {}
+func (noopLocker) Lock()    {}
+func (noopLocker) Unlock()  {}

@@ -1,21 +1,28 @@
-FROM golang:1.25-alpine AS builder
+FROM umputun/baseimage:buildgo-latest AS build
 
 ARG GIT_BRANCH
 ARG GITHUB_SHA
 ARG CI
 
-ENV CGO_ENABLED=0
+ADD . /build/stash
+WORKDIR /build/stash
 
-WORKDIR /build
-COPY . .
+RUN \
+    if [ -z "$CI" ] ; then \
+    echo "runs outside of CI" && version=$(/script/git-rev.sh); \
+    else version=${GIT_BRANCH}-${GITHUB_SHA:0:7}-$(date +%Y%m%dT%H:%M:%S); fi && \
+    echo "version=$version" && \
+    cd app && go build -o /build/stash/stash -ldflags "-X main.revision=${version} -s -w"
 
-RUN go build -o stash -ldflags "-X main.revision=${GIT_BRANCH}-${GITHUB_SHA:0:7}-$(date +%Y%m%d-%H:%M:%S)" ./app
 
-FROM alpine:3.21
+FROM umputun/baseimage:app-latest
 
-COPY --from=builder /build/stash /srv/stash
+LABEL org.opencontainers.image.source="https://github.com/umputun/stash"
 
-RUN apk add --no-cache tzdata
+COPY --from=build /build/stash/stash /srv/stash
+RUN chmod +x /srv/stash
 
 WORKDIR /srv
-ENTRYPOINT ["/srv/stash"]
+
+CMD ["/srv/stash"]
+ENTRYPOINT ["/init.sh"]

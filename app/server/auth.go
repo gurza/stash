@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"sort"
@@ -11,6 +9,7 @@ import (
 	"time"
 
 	log "github.com/go-pkgz/lgr"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -230,11 +229,7 @@ func (a *Auth) CreateSession() (string, error) {
 		return "", fmt.Errorf("auth not enabled")
 	}
 
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("failed to generate session token: %w", err)
-	}
-	token := hex.EncodeToString(bytes)
+	token := uuid.NewString()
 
 	a.sessionsMu.Lock()
 	defer a.sessionsMu.Unlock()

@@ -14,31 +14,6 @@ import (
 	_ "modernc.org/sqlite" // sqlite driver
 )
 
-// DBType represents the database type.
-type DBType int
-
-// Database type constants.
-const (
-	DBTypeSQLite DBType = iota
-	DBTypePostgres
-)
-
-// RWLocker is an interface for read-write locking.
-type RWLocker interface {
-	RLock()
-	RUnlock()
-	Lock()
-	Unlock()
-}
-
-// noopLocker implements RWLocker with no-op operations (for PostgreSQL).
-type noopLocker struct{}
-
-func (noopLocker) RLock()   {}
-func (noopLocker) RUnlock() {}
-func (noopLocker) Lock()    {}
-func (noopLocker) Unlock()  {}
-
 // Store implements key-value storage using SQLite or PostgreSQL.
 type Store struct {
 	db     *sqlx.DB

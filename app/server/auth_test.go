@@ -240,7 +240,7 @@ func TestAuth_Session(t *testing.T) {
 	token, err := auth.CreateSession()
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
-	assert.Len(t, token, 64) // 32 bytes hex encoded
+	assert.Len(t, token, 36) // uuid format
 
 	// validate session
 	assert.True(t, auth.ValidateSession(token))

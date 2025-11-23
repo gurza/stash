@@ -18,7 +18,7 @@ func TestIntegration(t *testing.T) {
 	tmpDir := t.TempDir()
 	opts.DB = filepath.Join(tmpDir, "test.db")
 	opts.Server.Address = "127.0.0.1:18484" // use non-standard port to avoid conflicts
-	opts.Server.ReadTimeout = 5
+	opts.Server.ReadTimeout = 5 * time.Second
 	opts.Auth.PasswordHash = ""
 	opts.Auth.Tokens = nil
 
@@ -116,11 +116,11 @@ func TestIntegration_WithAuth(t *testing.T) {
 	tmpDir := t.TempDir()
 	opts.DB = filepath.Join(tmpDir, "test.db")
 	opts.Server.Address = "127.0.0.1:18485"
-	opts.Server.ReadTimeout = 5
+	opts.Server.ReadTimeout = 5 * time.Second
 	// bcrypt hash for "testpass"
 	opts.Auth.PasswordHash = "$2a$10$kE1cSYqrktsr5iVW2pbB3OOmZAgGRggfXbvs/q0XUpyqvzLywEQ5y"
 	opts.Auth.Tokens = []string{"apikey:*:rw", "readonly:*:r", "scoped:app/*:rw"}
-	opts.Auth.LoginTTL = 60
+	opts.Auth.LoginTTL = time.Hour
 
 	// start server in background
 	ctx, cancel := context.WithCancel(context.Background())

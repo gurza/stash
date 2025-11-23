@@ -22,14 +22,14 @@ var opts struct {
 	DB string `short:"d" long:"db" env:"STASH_DB" default:"stash.db" description:"database URL (sqlite file or postgres://...)"`
 
 	Server struct {
-		Address     string `long:"address" env:"ADDRESS" default:":8484" description:"server listen address"`
-		ReadTimeout int    `long:"read-timeout" env:"READ_TIMEOUT" default:"5" description:"read timeout in seconds"`
+		Address     string        `long:"address" env:"ADDRESS" default:":8484" description:"server listen address"`
+		ReadTimeout time.Duration `long:"read-timeout" env:"READ_TIMEOUT" default:"5s" description:"read timeout"`
 	} `group:"server" namespace:"server" env-namespace:"STASH_SERVER"`
 
 	Auth struct {
-		PasswordHash string   `long:"password-hash" env:"PASSWORD_HASH" description:"bcrypt hash for admin password (enables auth)"`
-		Tokens       []string `long:"token" env:"AUTH_TOKEN" env-delim:"," description:"API token with prefix permissions (token:prefix:rw)"`
-		LoginTTL     int      `long:"login-ttl" env:"LOGIN_TTL" default:"1440" description:"login session TTL in minutes"`
+		PasswordHash string        `long:"password-hash" env:"PASSWORD_HASH" description:"bcrypt hash for admin password (enables auth)"`
+		Tokens       []string      `long:"token" env:"AUTH_TOKEN" env-delim:"," description:"API token with prefix permissions (token:prefix:rw)"`
+		LoginTTL     time.Duration `long:"login-ttl" env:"LOGIN_TTL" default:"24h" description:"login session TTL"`
 	} `group:"auth" namespace:"auth" env-namespace:"STASH_AUTH"`
 
 	Debug   bool `long:"dbg" env:"DEBUG" description:"debug mode"`
@@ -90,11 +90,11 @@ func run(ctx context.Context) error {
 	// initialize and start HTTP server
 	srv, err := server.New(kvStore, server.Config{
 		Address:      opts.Server.Address,
-		ReadTimeout:  time.Duration(opts.Server.ReadTimeout) * time.Second,
+		ReadTimeout:  opts.Server.ReadTimeout,
 		Version:      revision,
 		PasswordHash: opts.Auth.PasswordHash,
 		AuthTokens:   opts.Auth.Tokens,
-		LoginTTL:     time.Duration(opts.Auth.LoginTTL) * time.Minute,
+		LoginTTL:     opts.Auth.LoginTTL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize server: %w", err)

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -48,31 +49,16 @@ func templateFuncs() template.FuncMap {
 		},
 		"formatSize": func(size int) string {
 			if size < 1024 {
-				return formatInt(size) + " B"
+				return strconv.Itoa(size) + " B"
 			}
 			if size < 1024*1024 {
-				return formatFloat(float64(size)/1024) + " KB"
+				return strconv.FormatFloat(float64(size)/1024, 'f', 1, 64) + " KB"
 			}
-			return formatFloat(float64(size)/(1024*1024)) + " MB"
+			return strconv.FormatFloat(float64(size)/(1024*1024), 'f', 1, 64) + " MB"
 		},
 		"urlEncode":     url.PathEscape,
 		"sortModeLabel": sortModeLabel,
 	}
-}
-
-func formatInt(n int) string {
-	if n < 0 {
-		return "-" + formatInt(-n)
-	}
-	if n < 10 {
-		return string(rune('0' + n))
-	}
-	return formatInt(n/10) + string(rune('0'+n%10))
-}
-
-func formatFloat(f float64) string {
-	i := int(f * 10)
-	return formatInt(i/10) + "." + formatInt(i%10)
 }
 
 // parseTemplates parses all templates from embedded filesystem.
