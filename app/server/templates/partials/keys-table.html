@@ -1,0 +1,81 @@
+{{define "keys-table"}}
+{{if .Keys}}
+{{if eq .ViewMode "cards"}}
+<div class="cards-container">
+    {{range .Keys}}
+    <div class="key-card">
+        <div class="key-card-header"
+             hx-get="/web/keys/view/{{.Key | urlEncode}}"
+             hx-target="#modal-content"
+             hx-swap="innerHTML">
+            <span class="key-card-name">{{.Key}}</span>
+        </div>
+        <div class="key-card-meta">
+            <span>{{.Size | formatSize}}</span>
+            <span>Updated: {{.UpdatedAt | formatTime}}</span>
+        </div>
+        <div class="key-card-actions">
+            <button class="btn btn-secondary btn-small"
+                    hx-get="/web/keys/edit/{{.Key | urlEncode}}"
+                    hx-target="#modal-content"
+                    hx-swap="innerHTML">Edit</button>
+            <button class="btn btn-danger btn-small"
+                    onclick="showConfirmDelete('{{.Key | js}}', '/web/keys/{{.Key | urlEncode}}')">Delete</button>
+        </div>
+    </div>
+    {{end}}
+</div>
+{{else}}
+<table>
+    <thead>
+        <tr>
+            <th>Key</th>
+            <th>Size</th>
+            <th>Updated</th>
+            <th>Created</th>
+            <th class="actions-cell">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Keys}}
+        <tr class="clickable-row"
+            hx-get="/web/keys/view/{{.Key | urlEncode}}"
+            hx-target="#modal-content"
+            hx-swap="innerHTML"
+            hx-trigger="click target:td:not(.actions-cell)">
+            <td class="key-cell">{{.Key}}</td>
+            <td class="size-cell">{{.Size | formatSize}}</td>
+            <td class="date-cell">{{.UpdatedAt | formatTime}}</td>
+            <td class="date-cell">{{.CreatedAt | formatTime}}</td>
+            <td class="actions-cell">
+                <button class="btn btn-secondary btn-small"
+                        hx-get="/web/keys/edit/{{.Key | urlEncode}}"
+                        hx-target="#modal-content"
+                        hx-swap="innerHTML">Edit</button>
+                <button class="btn btn-danger btn-small"
+                        onclick="showConfirmDelete('{{.Key | js}}', '/web/keys/{{.Key | urlEncode}}')">Delete</button>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}
+<span id="key-count" hx-swap-oob="innerHTML" style="display:none">{{len .Keys}} {{if eq (len .Keys) 1}}key{{else}}keys{{end}}{{if .Search}} matching "{{.Search}}"{{end}}</span>
+{{else if .Search}}
+<div class="empty-state">
+    <p>No keys matching "{{.Search}}"</p>
+</div>
+<span id="key-count" hx-swap-oob="innerHTML" style="display:none">no keys matching "{{.Search}}"</span>
+{{else}}
+<div class="empty-state">
+    <p>No keys stored yet</p>
+    <button class="btn btn-primary"
+            hx-get="/web/keys/new"
+            hx-target="#modal-content"
+            hx-swap="innerHTML">
+        Create your first key
+    </button>
+</div>
+<span id="key-count" hx-swap-oob="innerHTML" style="display:none">no keys</span>
+{{end}}
+{{end}}

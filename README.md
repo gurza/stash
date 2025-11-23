@@ -5,9 +5,11 @@ Simple key-value configuration service. A minimal alternative to Consul KV or et
 ## Features
 
 - HTTP API for key-value operations (GET, PUT, DELETE)
+- Web UI for managing keys (view, create, edit, delete)
 - SQLite-based persistent storage
 - Hierarchical keys with slashes (e.g., `app/config/database`)
 - Binary-safe values
+- Light/dark theme with system preference detection
 
 ## Installation
 
@@ -70,6 +72,16 @@ curl http://localhost:8484/ping
 ```
 
 Returns `pong` with status 200.
+
+## Web UI
+
+Access the web interface at `http://localhost:8484/`. Features:
+
+- Table view of all keys with size and timestamps
+- Search keys by name
+- View, create, edit, and delete keys
+- Binary value display (base64 encoded)
+- Light/dark theme toggle
 
 ## Examples
 

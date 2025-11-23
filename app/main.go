@@ -81,11 +81,14 @@ func run(ctx context.Context) error {
 	defer kvStore.Close()
 
 	// initialize and start HTTP server
-	srv := server.New(kvStore, server.Config{
+	srv, err := server.New(kvStore, server.Config{
 		Address:     opts.Server.Address,
 		ReadTimeout: time.Duration(opts.Server.ReadTimeout) * time.Second,
 		Version:     revision,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to initialize server: %w", err)
+	}
 
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("server failed: %w", err)

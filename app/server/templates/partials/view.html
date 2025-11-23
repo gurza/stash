@@ -1,0 +1,26 @@
+{{define "view"}}
+<div class="modal-header">
+    <h2>View Key</h2>
+    <button class="modal-close" onclick="hideModal('main-modal')">&times;</button>
+</div>
+<div class="modal-body">
+    <div class="form-group">
+        <label>Key</label>
+        <div class="value-display">{{.Key}}</div>
+    </div>
+    <div class="form-group">
+        <label>Value</label>
+        {{if .IsBinary}}
+        <span class="binary-indicator">Base64 encoded</span>
+        {{end}}
+        <div class="value-display value-content">{{.Value}}</div>
+    </div>
+</div>
+<div class="modal-footer">
+    <button class="btn btn-secondary" onclick="hideModal('main-modal')">Close</button>
+    <button class="btn btn-primary"
+            hx-get="/web/keys/edit/{{.Key | urlEncode}}"
+            hx-target="#modal-content"
+            hx-swap="innerHTML">Edit</button>
+</div>
+{{end}}

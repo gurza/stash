@@ -1,0 +1,50 @@
+{{define "base.html"}}
+<!DOCTYPE html>
+<html lang="en" {{if .Theme}}data-theme="{{.Theme}}"{{end}}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stash - Key-Value Store</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        {{template "content" .}}
+    </div>
+
+    <!-- Main modal for view/edit/create -->
+    <div id="main-modal" class="modal-backdrop">
+        <div class="modal">
+            <div id="modal-content">
+                <!-- Content loaded via HTMX -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm delete modal -->
+    <div id="confirm-modal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Confirm Delete</h2>
+                <button class="modal-close" onclick="hideModal('confirm-modal')">&times;</button>
+            </div>
+            <div class="modal-body confirm-dialog">
+                <p>Are you sure you want to delete this key?</p>
+                <p class="key-name" id="confirm-key"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('confirm-modal')">Cancel</button>
+                <button id="confirm-delete-btn" class="btn btn-danger"
+                        hx-delete=""
+                        hx-target="#keys-table"
+                        hx-swap="innerHTML"
+                        data-close-modal>Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+{{end}}

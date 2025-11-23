@@ -23,5 +23,7 @@ coverage.html
 *.db-shm
 *.db-wal
 
+.playwright-mcp/
+
 # vendor (if not committed)
 # vendor/

@@ -1,0 +1,44 @@
+{{define "content"}}
+<div class="header">
+    <h1>Stash</h1>
+    <div class="header-actions">
+        <input type="search"
+               name="search"
+               placeholder="Search keys..."
+               hx-get="/web/keys"
+               hx-trigger="input changed delay:300ms, search"
+               hx-target="#keys-table"
+               hx-swap="innerHTML"
+               class="search-input">
+        <button class="btn btn-primary"
+                hx-get="/web/keys/new"
+                hx-target="#modal-content"
+                hx-swap="innerHTML">
+            + New Key
+        </button>
+        <button class="btn-icon"
+                hx-post="/web/view-mode"
+                hx-target="#keys-table"
+                hx-swap="innerHTML"
+                hx-include="[name='search']"
+                title="Toggle view mode">
+            {{if eq .ViewMode "cards"}}☰{{else}}☷{{end}}
+        </button>
+        <form hx-post="/web/theme" hx-swap="none">
+            <button type="submit" class="btn-icon" title="Toggle theme">
+                {{if eq .Theme "dark"}}☀{{else}}☾{{end}}
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="stats">
+    <span id="key-count">{{if eq (len .Keys) 0}}no keys{{else}}{{len .Keys}} {{if eq (len .Keys) 1}}key{{else}}keys{{end}}{{end}}</span>
+</div>
+
+<div class="table-container">
+    <div id="keys-table">
+        {{template "keys-table" .}}
+    </div>
+</div>
+{{end}}

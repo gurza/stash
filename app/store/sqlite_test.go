@@ -128,6 +128,66 @@ func TestSQLite_Delete(t *testing.T) {
 	})
 }
 
+func TestSQLite_List(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	t.Run("empty store returns empty slice", func(t *testing.T) {
+		keys, err := store.List()
+		require.NoError(t, err)
+		assert.Empty(t, keys)
+	})
+
+	t.Run("returns keys with correct metadata", func(t *testing.T) {
+		err := store.Set("key1", []byte("short"))
+		require.NoError(t, err)
+		err = store.Set("key2", []byte("longer value here"))
+		require.NoError(t, err)
+
+		keys, err := store.List()
+		require.NoError(t, err)
+		require.Len(t, keys, 2)
+
+		// find key1 and key2 in results
+		var key1Info, key2Info *KeyInfo
+		for i := range keys {
+			if keys[i].Key == "key1" {
+				key1Info = &keys[i]
+			}
+			if keys[i].Key == "key2" {
+				key2Info = &keys[i]
+			}
+		}
+		require.NotNil(t, key1Info)
+		require.NotNil(t, key2Info)
+
+		assert.Equal(t, 5, key1Info.Size)  // len("short")
+		assert.Equal(t, 17, key2Info.Size) // len("longer value here")
+		assert.False(t, key1Info.CreatedAt.IsZero())
+		assert.False(t, key1Info.UpdatedAt.IsZero())
+	})
+
+	t.Run("ordered by updated_at descending", func(t *testing.T) {
+		store2 := newTestStore(t)
+		defer store2.Close()
+
+		// create keys with delay to ensure different timestamps
+		err := store2.Set("first", []byte("1"))
+		require.NoError(t, err)
+		time.Sleep(1100 * time.Millisecond) // RFC3339 has second precision
+		err = store2.Set("second", []byte("2"))
+		require.NoError(t, err)
+
+		keys, err := store2.List()
+		require.NoError(t, err)
+		require.Len(t, keys, 2)
+
+		// most recently updated should be first
+		assert.Equal(t, "second", keys[0].Key)
+		assert.Equal(t, "first", keys[1].Key)
+	})
+}
+
 func newTestStore(t *testing.T) *SQLite {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")

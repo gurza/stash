@@ -112,6 +112,19 @@ func (s *SQLite) Delete(key string) error {
 	return nil
 }
 
+// List returns metadata for all keys, ordered by updated_at descending.
+func (s *SQLite) List() ([]KeyInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var keys []KeyInfo
+	query := `SELECT key, length(value) as size, created_at, updated_at FROM kv ORDER BY updated_at DESC`
+	if err := s.db.Select(&keys, query); err != nil {
+		return nil, fmt.Errorf("failed to list keys: %w", err)
+	}
+	return keys, nil
+}
+
 // Close closes the database connection.
 func (s *SQLite) Close() error {
 	if err := s.db.Close(); err != nil {
