@@ -1,10 +1,12 @@
 package store
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/go-pkgz/testutils/containers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -188,10 +190,137 @@ func TestSQLite_List(t *testing.T) {
 	})
 }
 
-func newTestStore(t *testing.T) *SQLite {
+func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	store, err := NewSQLite(dbPath)
 	require.NoError(t, err)
 	return store
+}
+
+// PostgreSQL tests using testcontainers
+
+func TestStore_Postgres(t *testing.T) {
+	ctx := context.Background()
+
+	t.Log("starting postgres container...")
+	pgContainer := containers.NewPostgresTestContainerWithDB(ctx, t, "stash_test")
+	defer pgContainer.Close(ctx)
+	t.Log("postgres container started")
+
+	store, err := New(pgContainer.ConnectionString())
+	require.NoError(t, err)
+	defer store.Close()
+
+	assert.Equal(t, DBTypePostgres, store.dbType)
+
+	t.Run("set and get value", func(t *testing.T) {
+		err := store.Set("pgkey1", []byte("pgvalue1"))
+		require.NoError(t, err)
+
+		value, err := store.Get("pgkey1")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("pgvalue1"), value)
+	})
+
+	t.Run("update existing key", func(t *testing.T) {
+		err := store.Set("pgkey2", []byte("original"))
+		require.NoError(t, err)
+
+		err = store.Set("pgkey2", []byte("updated"))
+		require.NoError(t, err)
+
+		value, err := store.Get("pgkey2")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("updated"), value)
+	})
+
+	t.Run("get nonexistent key returns ErrNotFound", func(t *testing.T) {
+		_, err := store.Get("nonexistent")
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("handles binary data", func(t *testing.T) {
+		binary := []byte{0x00, 0x01, 0xFF, 0xFE}
+		err := store.Set("pgbinary", binary)
+		require.NoError(t, err)
+
+		value, err := store.Get("pgbinary")
+		require.NoError(t, err)
+		assert.Equal(t, binary, value)
+	})
+
+	t.Run("delete existing key", func(t *testing.T) {
+		err := store.Set("pgtodelete", []byte("value"))
+		require.NoError(t, err)
+
+		err = store.Delete("pgtodelete")
+		require.NoError(t, err)
+
+		_, err = store.Get("pgtodelete")
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("delete nonexistent key returns ErrNotFound", func(t *testing.T) {
+		err := store.Delete("nonexistent")
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("list returns keys with metadata", func(t *testing.T) {
+		err := store.Set("pglist1", []byte("short"))
+		require.NoError(t, err)
+		err = store.Set("pglist2", []byte("longer value"))
+		require.NoError(t, err)
+
+		keys, err := store.List()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(keys), 2)
+
+		// find our keys
+		var found1, found2 bool
+		for _, k := range keys {
+			if k.Key == "pglist1" {
+				assert.Equal(t, 5, k.Size)
+				found1 = true
+			}
+			if k.Key == "pglist2" {
+				assert.Equal(t, 12, k.Size)
+				found2 = true
+			}
+		}
+		assert.True(t, found1, "pglist1 not found")
+		assert.True(t, found2, "pglist2 not found")
+	})
+}
+
+func TestDetectDBType(t *testing.T) {
+	tests := []struct {
+		url    string
+		expect DBType
+	}{
+		{"stash.db", DBTypeSQLite},
+		{"./data/stash.db", DBTypeSQLite},
+		{"/tmp/stash.db", DBTypeSQLite},
+		{"file:stash.db", DBTypeSQLite},
+		{":memory:", DBTypeSQLite},
+		{"postgres://user:pass@localhost/db", DBTypePostgres},
+		{"postgresql://user:pass@localhost/db", DBTypePostgres},
+		{"POSTGRES://USER:PASS@localhost/db", DBTypePostgres},
+	}
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			assert.Equal(t, tt.expect, detectDBType(tt.url))
+		})
+	}
+}
+
+func TestAdoptQuery(t *testing.T) {
+	// sQLite store - no changes
+	sqliteStore := &Store{dbType: DBTypeSQLite}
+	assert.Equal(t, "SELECT * FROM kv WHERE key = ?", sqliteStore.adoptQuery("SELECT * FROM kv WHERE key = ?"))
+
+	// postgreSQL store - converts placeholders
+	pgStore := &Store{dbType: DBTypePostgres}
+	assert.Equal(t, "SELECT * FROM kv WHERE key = $1", pgStore.adoptQuery("SELECT * FROM kv WHERE key = ?"))
+	assert.Equal(t, "INSERT INTO kv VALUES ($1, $2, $3)", pgStore.adoptQuery("INSERT INTO kv VALUES (?, ?, ?)"))
 }

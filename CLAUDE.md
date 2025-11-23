@@ -14,16 +14,16 @@ Simple key-value configuration service - a minimal alternative to Consul KV or e
   - `static/` - Embedded CSS, JS, HTMX library
   - `templates/` - Embedded HTML templates (base, index, login, partials)
   - `mocks/` - Generated mocks (moq)
-- **app/store/** - SQLite storage layer
+- **app/store/** - Database storage layer (SQLite/PostgreSQL)
   - `store.go` - Types (KeyInfo), errors
-  - `sqlite.go` - SQLite implementation with WAL mode, List() method
+  - `sqlite.go` - Unified Store with SQLite and PostgreSQL support
 
 ## Key Dependencies
 
 - **CLI**: `github.com/umputun/go-flags`
 - **Logging**: `github.com/go-pkgz/lgr`
 - **HTTP**: `github.com/go-pkgz/routegroup`, `github.com/go-pkgz/rest`
-- **Database**: `github.com/jmoiron/sqlx`, `modernc.org/sqlite`
+- **Database**: `github.com/jmoiron/sqlx`, `modernc.org/sqlite`, `github.com/jackc/pgx/v5`
 - **Testing**: `github.com/stretchr/testify`
 
 ## Build & Test
@@ -72,5 +72,8 @@ POST   /logout                   # clear session, redirect to login
 
 - Consumer-side interfaces (KVStore defined in server package)
 - Return concrete types, accept interfaces
-- SQLite with WAL mode, SetMaxOpenConns(1), busy timeout
+- Database type auto-detected from URL (postgres:// vs file path)
+- SQLite: WAL mode, SetMaxOpenConns(1), busy timeout, sync.RWMutex for locking
+- PostgreSQL: standard connection pool, MVCC handles concurrency (no app-level locking)
+- Query placeholders: SQLite uses `?`, PostgreSQL uses `$1, $2, ...` (adoptQuery converts)
 - Keep it simple - no over-engineering

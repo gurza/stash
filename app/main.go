@@ -19,7 +19,7 @@ import (
 )
 
 var opts struct {
-	Store string `short:"s" long:"store" env:"STASH_STORE" default:"stash.db" description:"path to storage file"`
+	DB string `short:"d" long:"db" env:"STASH_DB" default:"stash.db" description:"database URL (sqlite file or postgres://...)"`
 
 	Server struct {
 		Address     string `long:"address" env:"ADDRESS" default:":8484" description:"server listen address"`
@@ -81,7 +81,7 @@ func run(ctx context.Context) error {
 	}
 
 	// initialize storage
-	kvStore, err := store.NewSQLite(opts.Store)
+	kvStore, err := store.New(opts.DB)
 	if err != nil {
 		return fmt.Errorf("failed to initialize store: %w", err)
 	}

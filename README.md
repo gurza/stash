@@ -6,7 +6,7 @@ Simple key-value configuration service. A minimal alternative to Consul KV or et
 
 - HTTP API for key-value operations (GET, PUT, DELETE)
 - Web UI for managing keys (view, create, edit, delete)
-- SQLite-based persistent storage
+- SQLite or PostgreSQL storage (auto-detected from URL)
 - Hierarchical keys with slashes (e.g., `app/config/database`)
 - Binary-safe values
 - Light/dark theme with system preference detection
@@ -28,20 +28,32 @@ make build
 ## Usage
 
 ```bash
-stash --store=/path/to/stash.db --server.address=:8484 --log.enabled
+# SQLite (default)
+stash --db=/path/to/stash.db --server.address=:8484
+
+# PostgreSQL
+stash --db="postgres://user:pass@localhost:5432/stash?sslmode=disable"
 ```
 
 ### Command Line Options
 
 | Option | Environment | Default | Description |
 |--------|-------------|---------|-------------|
-| `-s, --store` | `STASH_STORE` | `stash.db` | Path to SQLite database file |
+| `-d, --db` | `STASH_DB` | `stash.db` | Database URL (SQLite file or postgres://...) |
 | `--server.address` | `STASH_SERVER_ADDRESS` | `:8484` | Server listen address |
 | `--server.read-timeout` | `STASH_SERVER_READ_TIMEOUT` | `5` | Read timeout in seconds |
 | `--auth.password-hash` | `STASH_AUTH_PASSWORD_HASH` | - | bcrypt hash for admin password (enables auth) |
 | `--auth.token` | `STASH_AUTH_AUTH_TOKEN` | - | API token with prefix permissions (repeatable) |
 | `--auth.login-ttl` | `STASH_AUTH_LOGIN_TTL` | `1440` | Login session TTL in minutes |
 | `--dbg` | `DEBUG` | `false` | Debug mode |
+
+### Database URLs
+
+| Database | URL Format |
+|----------|------------|
+| SQLite (file) | `stash.db`, `./data/stash.db`, `file:stash.db` |
+| SQLite (memory) | `:memory:` |
+| PostgreSQL | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 
 ## Authentication
 
@@ -165,9 +177,38 @@ curl -X DELETE http://localhost:8484/kv/app/env
 
 ## Docker
 
+### SQLite
+
 ```bash
 docker run -p 8484:8484 -v /data:/srv/data ghcr.io/umputun/stash \
-    --store=/srv/data/stash.db --log.enabled
+    --db=/srv/data/stash.db
+```
+
+### PostgreSQL with Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  stash:
+    image: ghcr.io/umputun/stash
+    environment:
+      - STASH_DB=postgres://stash:secret@postgres:5432/stash?sslmode=disable
+    depends_on:
+      - postgres
+    ports:
+      - "8484:8484"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=stash
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=stash
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
 ```
 
 ## License

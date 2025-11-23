@@ -4,25 +4,102 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	log "github.com/go-pkgz/lgr"
+	_ "github.com/jackc/pgx/v5/stdlib" // postgresql driver
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite" // sqlite driver
 )
 
-// SQLite implements key-value storage using SQLite database.
-type SQLite struct {
-	db *sqlx.DB
-	mu sync.RWMutex
+// DBType represents the database type.
+type DBType int
+
+// Database type constants.
+const (
+	DBTypeSQLite DBType = iota
+	DBTypePostgres
+)
+
+// RWLocker is an interface for read-write locking.
+type RWLocker interface {
+	RLock()
+	RUnlock()
+	Lock()
+	Unlock()
 }
 
-// NewSQLite creates a new SQLite store with the given database path.
-// It initializes the schema and sets pragmas for optimal performance.
-func NewSQLite(dbPath string) (*SQLite, error) {
+// noopLocker implements RWLocker with no-op operations (for PostgreSQL).
+type noopLocker struct{}
+
+func (noopLocker) RLock()   {}
+func (noopLocker) RUnlock() {}
+func (noopLocker) Lock()    {}
+func (noopLocker) Unlock()  {}
+
+// Store implements key-value storage using SQLite or PostgreSQL.
+type Store struct {
+	db     *sqlx.DB
+	dbType DBType
+	mu     RWLocker
+}
+
+// New creates a new Store with the given database URL.
+// Automatically detects database type from URL:
+// - postgres:// or postgresql:// -> PostgreSQL
+// - everything else -> SQLite
+func New(dbURL string) (*Store, error) {
+	dbType := detectDBType(dbURL)
+
+	var db *sqlx.DB
+	var err error
+	var locker RWLocker
+
+	switch dbType {
+	case DBTypePostgres:
+		db, err = connectPostgres(dbURL)
+		locker = noopLocker{}
+	default:
+		db, err = connectSQLite(dbURL)
+		locker = &sync.RWMutex{}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Store{db: db, dbType: dbType, mu: locker}
+
+	if err := s.createSchema(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	log.Printf("[DEBUG] initialized %s store", s.dbTypeName())
+	return s, nil
+}
+
+// NewSQLite creates a new SQLite store (backward compatibility).
+func NewSQLite(dbPath string) (*Store, error) {
+	return New(dbPath)
+}
+
+// detectDBType determines database type from URL.
+func detectDBType(url string) DBType {
+	lower := strings.ToLower(url)
+	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
+		return DBTypePostgres
+	}
+	return DBTypeSQLite
+}
+
+// connectSQLite establishes SQLite connection with pragmas.
+func connectSQLite(dbPath string) (*sqlx.DB, error) {
 	db, err := sqlx.Connect("sqlite", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to connect to sqlite: %w", err)
 	}
 
 	// set pragmas for performance and reliability
@@ -43,30 +120,70 @@ func NewSQLite(dbPath string) (*SQLite, error) {
 	// limit connections for SQLite (single writer)
 	db.SetMaxOpenConns(1)
 
-	// create schema
-	schema := `
-		CREATE TABLE IF NOT EXISTS kv (
-			key TEXT PRIMARY KEY,
-			value BLOB NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)`
-	if _, err := db.Exec(schema); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("failed to create schema: %w", err)
+	return db, nil
+}
+
+// connectPostgres establishes PostgreSQL connection.
+func connectPostgres(dbURL string) (*sqlx.DB, error) {
+	db, err := sqlx.Connect("pgx", dbURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
 
-	return &SQLite{db: db}, nil
+	// set reasonable connection pool defaults
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	return db, nil
+}
+
+// createSchema creates the kv table if it doesn't exist.
+func (s *Store) createSchema() error {
+	var schema string
+	switch s.dbType {
+	case DBTypePostgres:
+		schema = `
+			CREATE TABLE IF NOT EXISTS kv (
+				key TEXT PRIMARY KEY,
+				value BYTEA NOT NULL,
+				created_at TIMESTAMP DEFAULT NOW(),
+				updated_at TIMESTAMP DEFAULT NOW()
+			)`
+	default:
+		schema = `
+			CREATE TABLE IF NOT EXISTS kv (
+				key TEXT PRIMARY KEY,
+				value BLOB NOT NULL,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			)`
+	}
+	if _, err := s.db.Exec(schema); err != nil {
+		return fmt.Errorf("failed to execute schema: %w", err)
+	}
+	return nil
+}
+
+// dbTypeName returns human-readable database type name.
+func (s *Store) dbTypeName() string {
+	switch s.dbType {
+	case DBTypePostgres:
+		return "postgres"
+	default:
+		return "sqlite"
+	}
 }
 
 // Get retrieves the value for the given key.
 // Returns ErrNotFound if the key does not exist.
-func (s *SQLite) Get(key string) ([]byte, error) {
+func (s *Store) Get(key string) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var value []byte
-	err := s.db.Get(&value, "SELECT value FROM kv WHERE key = ?", key)
+	query := s.adoptQuery("SELECT value FROM kv WHERE key = ?")
+	err := s.db.Get(&value, query, key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -78,14 +195,22 @@ func (s *SQLite) Get(key string) ([]byte, error) {
 
 // Set stores the value for the given key.
 // Creates a new key or updates an existing one.
-func (s *SQLite) Set(key string, value []byte) error {
+func (s *Store) Set(key string, value []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := time.Now().UTC().Format(time.RFC3339)
-	query := `
-		INSERT INTO kv (key, value, created_at, updated_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+	now := time.Now().UTC()
+	var query string
+	switch s.dbType {
+	case DBTypePostgres:
+		query = `
+			INSERT INTO kv (key, value, created_at, updated_at) VALUES ($1, $2, $3, $4)
+			ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`
+	default:
+		query = `
+			INSERT INTO kv (key, value, created_at, updated_at) VALUES (?, ?, ?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+	}
 	if _, err := s.db.Exec(query, key, value, now, now); err != nil {
 		return fmt.Errorf("failed to set key %q: %w", key, err)
 	}
@@ -94,11 +219,12 @@ func (s *SQLite) Set(key string, value []byte) error {
 
 // Delete removes the key from the store.
 // Returns ErrNotFound if the key does not exist.
-func (s *SQLite) Delete(key string) error {
+func (s *Store) Delete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result, err := s.db.Exec("DELETE FROM kv WHERE key = ?", key)
+	query := s.adoptQuery("DELETE FROM kv WHERE key = ?")
+	result, err := s.db.Exec(query, key)
 	if err != nil {
 		return fmt.Errorf("failed to delete key %q: %w", key, err)
 	}
@@ -114,12 +240,18 @@ func (s *SQLite) Delete(key string) error {
 }
 
 // List returns metadata for all keys, ordered by updated_at descending.
-func (s *SQLite) List() ([]KeyInfo, error) {
+func (s *Store) List() ([]KeyInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var keys []KeyInfo
-	query := `SELECT key, length(value) as size, created_at, updated_at FROM kv ORDER BY updated_at DESC`
+	var query string
+	switch s.dbType {
+	case DBTypePostgres:
+		query = `SELECT key, octet_length(value) as size, created_at, updated_at FROM kv ORDER BY updated_at DESC`
+	default:
+		query = `SELECT key, length(value) as size, created_at, updated_at FROM kv ORDER BY updated_at DESC`
+	}
 	if err := s.db.Select(&keys, query); err != nil {
 		return nil, fmt.Errorf("failed to list keys: %w", err)
 	}
@@ -127,9 +259,29 @@ func (s *SQLite) List() ([]KeyInfo, error) {
 }
 
 // Close closes the database connection.
-func (s *SQLite) Close() error {
+func (s *Store) Close() error {
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("failed to close database: %w", err)
 	}
 	return nil
+}
+
+// adoptQuery converts SQLite placeholders (?) to PostgreSQL ($1, $2, ...).
+func (s *Store) adoptQuery(query string) string {
+	if s.dbType != DBTypePostgres {
+		return query
+	}
+
+	result := make([]byte, 0, len(query)+10)
+	paramNum := 1
+	for i := 0; i < len(query); i++ {
+		if query[i] == '?' {
+			result = append(result, '$')
+			result = append(result, fmt.Sprintf("%d", paramNum)...)
+			paramNum++
+		} else {
+			result = append(result, query[i])
+		}
+	}
+	return string(result)
 }

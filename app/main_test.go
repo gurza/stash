@@ -16,7 +16,7 @@ import (
 func TestIntegration(t *testing.T) {
 	// setup options (ensure auth is disabled for this test)
 	tmpDir := t.TempDir()
-	opts.Store = filepath.Join(tmpDir, "test.db")
+	opts.DB = filepath.Join(tmpDir, "test.db")
 	opts.Server.Address = "127.0.0.1:18484" // use non-standard port to avoid conflicts
 	opts.Server.ReadTimeout = 5
 	opts.Auth.PasswordHash = ""
@@ -114,7 +114,7 @@ func TestIntegration(t *testing.T) {
 func TestIntegration_WithAuth(t *testing.T) {
 	// setup options with auth enabled
 	tmpDir := t.TempDir()
-	opts.Store = filepath.Join(tmpDir, "test.db")
+	opts.DB = filepath.Join(tmpDir, "test.db")
 	opts.Server.Address = "127.0.0.1:18485"
 	opts.Server.ReadTimeout = 5
 	// bcrypt hash for "testpass"
