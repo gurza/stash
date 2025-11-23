@@ -47,105 +47,103 @@ stash --password-hash '$2a$10$...' \
 
 ## Implementation Plan
 
-### Iteration 1: CLI Options & Data Structures
+**Status: COMPLETED** (2025-11-23)
 
-- [ ] Add auth options to `app/main.go`:
-  - `--password-hash` / `PASSWORD_HASH` - bcrypt hash for admin password
-  - `--auth-token` / `AUTH_TOKEN` - repeatable flag for API tokens
-  - `--login-ttl` / `LOGIN_TTL` - session duration (default: 24h)
-- [ ] Create `app/server/auth.go` with types:
-  - `Permission` type (Read, Write, ReadWrite)
-  - `TokenACL` struct (token, prefix -> permission map)
+### Iteration 1: CLI Options & Data Structures ✓
+
+- [x] Add auth options to `app/main.go`:
+  - `--auth.password-hash` / `STASH_AUTH_PASSWORD_HASH` - bcrypt hash for admin password
+  - `--auth.token` / `STASH_AUTH_AUTH_TOKEN` - repeatable flag for API tokens
+  - `--auth.login-ttl` / `STASH_AUTH_LOGIN_TTL` - session duration in minutes (default: 1440)
+- [x] Create `app/server/auth.go` with types:
+  - `Permission` type (None, Read, Write, ReadWrite)
+  - `TokenACL` struct (token, prefixes sorted by length)
   - `session` struct (token, createdAt)
-- [ ] Add auth fields to `Server` struct in `server.go`:
-  - `passwordHash string`
-  - `authTokens map[string]*TokenACL`
-  - `sessions map[string]session`
-  - `sessionsMu sync.Mutex`
-  - `loginTTL time.Duration`
-- [ ] Update `Config` struct and `New()` to accept auth settings
-- [ ] Implement token parser: parse `"token:prefix:rw"` format
+  - `Auth` struct encapsulating all auth state
+- [x] Update `Config` struct and `New()` to accept auth settings
+- [x] Implement token parser: parse `"token:prefix:rw"` format
   - Validate format, error on malformed input
   - Error on duplicate token+prefix combinations
   - Store prefixes sorted by length (longest first) for deterministic matching
-- [ ] Write tests for token parser
+- [x] Write tests for token parser
 
-### Iteration 2: Session Management
+### Iteration 2: Session Management ✓
 
-- [ ] Implement `createSession()` - generate secure random token
-- [ ] Implement `validateSession(token)` - check token exists and not expired
-- [ ] Implement `invalidateSession(token)` - remove session
-- [ ] Implement `cleanupExpiredSessions()` - periodic cleanup
-- [ ] Write tests for session management
+- [x] Implement `CreateSession()` - generate secure random token (32 bytes hex encoded)
+- [x] Implement `ValidateSession(token)` - check token exists and not expired
+- [x] Implement `InvalidateSession(token)` - remove session
+- [x] Implement `cleanupExpiredSessions()` - cleanup on session creation
+- [x] Write tests for session management
 
-### Iteration 3: Auth Middleware
+### Iteration 3: Auth Middleware ✓
 
-- [ ] Create `authMiddleware(next http.Handler)`:
-  - Skip auth for `/login`, `/ping`, `/static/*`
+- [x] Create `SessionAuth` middleware for web UI routes:
   - Check session cookie -> allow (full access)
+  - Else redirect to `/login`
+- [x] Create `TokenAuth` middleware for API routes:
+  - Check session cookie -> allow (full access for UI calling API)
   - Check Bearer token -> allow (scoped access)
-  - Else redirect to `/login` (browser) or 401 (API)
-- [ ] Create helper `checkTokenPermission(token, key, isWrite)`:
-  - Match key against token's prefix patterns
+  - Else 401 Unauthorized
+- [x] Create `NoopAuth` pass-through middleware (when auth disabled)
+- [x] Create helper `CheckPermission(token, key, needWrite)`:
+  - Match key against token's prefix patterns (longest-prefix-wins)
   - Check if operation (read/write) is allowed
-- [ ] Add middleware to router (conditional on auth enabled)
-- [ ] Write tests for middleware logic
+- [x] Add middleware to route groups conditionally
+- [x] Write tests for middleware logic
 
-### Iteration 4: Login/Logout Handlers
+### Iteration 4: Login/Logout Handlers ✓
 
-- [ ] Create login template `templates/login.html`:
+- [x] Create login template `templates/login.html`:
   - Simple password form
   - Error message display
   - Theme support (consistent with main UI)
-- [ ] Implement `handleLoginForm()` - render login page
-- [ ] Implement `handleLogin()`:
+- [x] Implement `handleLoginForm()` - render login page
+- [x] Implement `handleLogin()`:
   - Parse form, validate password with bcrypt
-  - Create session, set secure cookie
+  - Create session, set secure cookie (HttpOnly, SameSite=Lax)
   - Redirect to `/`
-- [ ] Implement `handleLogout()`:
+- [x] Implement `handleLogout()`:
   - Invalidate session, clear cookie
   - Redirect to `/login`
-- [ ] Add rate limiting on login endpoint (tollbooth)
-- [ ] Register routes: `GET /login`, `POST /login`, `POST /logout`
-- [ ] Write tests for login/logout handlers
+- [x] Register routes: `GET /login`, `POST /login`, `POST /logout`
+- [x] Write tests for login/logout handlers
 
-### Iteration 5: API Token Authorization
+### Iteration 5: API Token Authorization ✓
 
-- [ ] Update `/kv` handlers to check token permissions:
-  - `handleGet` - requires read permission for key prefix
-  - `handleSet` - requires write permission for key prefix
-  - `handleDelete` - requires write permission for key prefix
-- [ ] Return 403 Forbidden when token lacks permission
-- [ ] Update `/web` handlers for consistency:
-  - Session cookie = full access (already admin)
-  - Bearer token = check permissions per operation
-- [ ] Write tests for prefix matching and permission checks
+- [x] TokenAuth middleware checks permissions per operation:
+  - GET requests require read permission for key prefix
+  - PUT/DELETE requests require write permission for key prefix
+- [x] Return 403 Forbidden when token lacks permission
+- [x] Session cookie grants full access for web UI calling API
+- [x] Write tests for prefix matching and permission checks
 
-### Iteration 6: UI Updates
+### Iteration 6: UI Updates ✓
 
-- [ ] Add logout button to header (when auth enabled)
-- [ ] Show current auth status in UI (optional)
-- [ ] Hide edit/delete buttons for read-only tokens (if applicable)
-- [ ] Test UI flow: login -> use -> logout
+- [x] Add logout button to header (when auth enabled)
+- [x] Add login page styles (`.login-container`, `.login-box`, etc.)
+- [x] Test UI flow: login -> use -> logout
 
-### Iteration 7: Documentation & Testing
+### Iteration 7: Documentation & Testing ✓
 
-- [ ] Update README.md:
-  - Document `--password-hash` option
-  - Document `--auth-token` format
+- [x] Update README.md:
+  - Document `--auth.password-hash` option
+  - Document `--auth.token` format
   - Add examples for generating bcrypt hash
   - Document API authentication methods
-- [ ] Update CLAUDE.md if needed
-- [ ] Integration tests for full auth flow
-- [ ] Manual testing checklist:
-  - [ ] No auth mode works as before
-  - [ ] Password login works
-  - [ ] Basic auth works
-  - [ ] Bearer token with full access works
-  - [ ] Bearer token with read-only works
-  - [ ] Bearer token with prefix restriction works
-  - [ ] Logout clears session
-  - [ ] Rate limiting triggers after failed attempts
+- [x] Update CLAUDE.md with auth section
+- [x] Integration tests for full auth flow (`TestIntegration_WithAuth`)
+- [x] Manual testing completed:
+  - [x] No auth mode works as before
+  - [x] Password login works
+  - [x] Bearer token with full access works
+  - [x] Bearer token with read-only works
+  - [x] Bearer token with prefix restriction works
+  - [x] Logout clears session
+
+### Not Implemented (deferred)
+
+- Rate limiting on login endpoint (future improvement)
+- Basic auth support (Bearer tokens only)
 
 ---
 
