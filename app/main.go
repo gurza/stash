@@ -1,0 +1,111 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+
+	log "github.com/go-pkgz/lgr"
+	"github.com/umputun/go-flags"
+)
+
+var opts struct {
+	Store string `short:"s" long:"store" env:"STASH_STORE" default:"stash.db" description:"path to storage file"`
+
+	Server struct {
+		Address     string `long:"address" env:"ADDRESS" default:":8484" description:"server listen address"`
+		ReadTimeout int    `long:"read-timeout" env:"READ_TIMEOUT" default:"5" description:"read timeout in seconds"`
+	} `group:"server" namespace:"server" env-namespace:"STASH_SERVER"`
+
+	Log struct {
+		Enabled bool `long:"enabled" env:"ENABLED" description:"enable logging"`
+		Debug   bool `long:"debug" env:"DEBUG" description:"debug mode"`
+	} `group:"log" namespace:"log" env-namespace:"STASH_LOG"`
+
+	Version bool `long:"version" description:"show version and exit"`
+}
+
+var revision = "unknown"
+
+func main() {
+	fmt.Printf("stash %s\n", revision)
+
+	p := flags.NewParser(&opts, flags.PassDoubleDash|flags.HelpFlag)
+	if _, err := p.Parse(); err != nil {
+		if err.(*flags.Error).Type != flags.ErrHelp {
+			fmt.Printf("%v\n", err)
+			os.Exit(1)
+		}
+		p.WriteHelp(os.Stderr)
+		os.Exit(2)
+	}
+
+	if opts.Version {
+		os.Exit(0)
+	}
+
+	setupLogs()
+
+	defer func() {
+		if x := recover(); x != nil {
+			log.Printf("[WARN] run time panic:\n%v", x)
+			panic(x)
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	signals(cancel)
+
+	if err := run(ctx); err != nil {
+		log.Printf("[ERROR] failed: %v", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) error { //nolint:unparam // will return errors when implemented
+	log.Printf("[INFO] starting stash server on %s", opts.Server.Address)
+
+	// TODO: initialize storage
+	// TODO: initialize HTTP server
+	// TODO: start server
+
+	<-ctx.Done()
+	log.Printf("[INFO] shutting down")
+	return nil
+}
+
+func setupLogs() io.Writer {
+	if !opts.Log.Enabled {
+		log.Setup(log.Out(io.Discard), log.Err(io.Discard))
+		return os.Stdout
+	}
+
+	log.Setup(log.Msec)
+
+	if opts.Log.Debug {
+		log.Setup(log.Debug, log.CallerFunc, log.CallerPkg, log.CallerFile)
+	}
+
+	return os.Stdout
+}
+
+func signals(cancel context.CancelFunc) {
+	sigChan := make(chan os.Signal, 1)
+	go func() {
+		stacktrace := make([]byte, 8192)
+		for sig := range sigChan {
+			switch sig {
+			case syscall.SIGQUIT:
+				length := runtime.Stack(stacktrace, true)
+				fmt.Println(string(stacktrace[:length]))
+			case syscall.SIGTERM, syscall.SIGINT:
+				cancel()
+			}
+		}
+	}()
+	signal.Notify(sigChan, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+}

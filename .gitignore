@@ -1,0 +1,27 @@
+# binaries
+stash
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# build artifacts
+dist/
+coverage.out
+coverage.html
+*.log
+
+# database
+*.db
+*.db-shm
+*.db-wal
+
+# vendor (if not committed)
+# vendor/
