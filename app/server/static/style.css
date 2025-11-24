@@ -147,22 +147,26 @@ body {
 }
 
 .btn-secondary {
-    background-color: var(--color-surface);
-    color: var(--color-text);
+    background-color: transparent;
+    color: var(--color-text-muted);
     border: 1px solid var(--color-border);
 }
 
 .btn-secondary:hover {
-    background-color: var(--color-surface-hover);
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
 }
 
 .btn-danger {
-    background-color: var(--color-danger);
-    color: white;
+    background-color: transparent;
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
 }
 
 .btn-danger:hover {
-    background-color: var(--color-danger-hover);
+    background-color: var(--color-danger);
+    color: white;
 }
 
 .btn-icon {
