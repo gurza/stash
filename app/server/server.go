@@ -58,6 +58,11 @@ func New(st KVStore, cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to initialize auth: %w", err)
 	}
 
+	// warn if tokens provided but auth is disabled (no password hash)
+	if auth == nil && len(cfg.AuthTokens) > 0 {
+		log.Printf("[WARN] auth tokens provided but --auth.password-hash is not set; API is unauthenticated")
+	}
+
 	return &Server{
 		store:   st,
 		cfg:     cfg,
@@ -102,8 +107,8 @@ func (s *Server) routes() http.Handler {
 	// global middleware (applies to all routes)
 	router.Use(
 		rest.Recoverer(log.Default()),
+		rest.RealIP, // must be before Throttle to rate-limit by real client IP
 		rest.Throttle(1000),
-		rest.RealIP,
 		rest.Trace,
 		rest.SizeLimit(1024*1024), // 1MB
 		rest.AppInfo("stash", "umputun", s.version),

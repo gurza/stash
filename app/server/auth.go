@@ -169,6 +169,14 @@ func (a *Auth) Enabled() bool {
 	return a != nil && a.passwordHash != ""
 }
 
+// LoginTTL returns the configured login session TTL.
+func (a *Auth) LoginTTL() time.Duration {
+	if a == nil {
+		return 24 * time.Hour // default
+	}
+	return a.loginTTL
+}
+
 // ValidatePassword checks if the password matches the stored hash.
 func (a *Auth) ValidatePassword(password string) bool {
 	if a == nil {
@@ -336,7 +344,7 @@ func (a *Auth) TokenAuth(next http.Handler) http.Handler {
 		needWrite := r.Method == http.MethodPut || r.Method == http.MethodDelete
 
 		if !a.CheckPermission(token, key, needWrite) {
-			log.Printf("[DEBUG] token %q denied %s access to key %q", token, r.Method, key)
+			log.Printf("[DEBUG] token %q denied %s access to key %q", maskToken(token), r.Method, key)
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
@@ -348,4 +356,12 @@ func (a *Auth) TokenAuth(next http.Handler) http.Handler {
 // NoopAuth returns a pass-through middleware (used when auth is disabled).
 func NoopAuth(next http.Handler) http.Handler {
 	return next
+}
+
+// maskToken returns a masked version of token for safe logging (shows first 4 chars).
+func maskToken(token string) string {
+	if len(token) <= 4 {
+		return "****"
+	}
+	return token[:4] + "****"
 }

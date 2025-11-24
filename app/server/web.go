@@ -575,7 +575,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Name:     cookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   24 * 60 * 60, // 24 hours
+		MaxAge:   int(s.auth.LoginTTL().Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 		Secure:   secure,
