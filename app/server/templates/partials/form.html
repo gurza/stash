@@ -3,7 +3,7 @@
     <h2>{{if .IsNew}}Create Key{{else}}Edit Key{{end}}</h2>
     <button class="modal-close" onclick="hideModal('main-modal')">&times;</button>
 </div>
-<form {{if .IsNew}}hx-post="/web/keys"{{else}}hx-put="/web/keys/{{.Key | urlEncode}}"{{end}}
+<form {{if .IsNew}}hx-post="{{.BaseURL}}/web/keys"{{else}}hx-put="{{.BaseURL}}/web/keys/{{.Key | urlEncode}}"{{end}}
       hx-target="#keys-table"
       hx-swap="innerHTML"
       data-close-modal>

@@ -300,7 +300,8 @@ func TestAuth_SessionAuth(t *testing.T) {
 	auth, err := NewAuth("$2a$10$hash", nil, time.Hour)
 	require.NoError(t, err)
 
-	handler := auth.SessionAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	middleware := auth.SessionAuth("/login")
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -320,6 +321,23 @@ func TestAuth_SessionAuth(t *testing.T) {
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestAuth_SessionAuth_WithBaseURL(t *testing.T) {
+	auth, err := NewAuth("$2a$10$hash", nil, time.Hour)
+	require.NoError(t, err)
+
+	middleware := auth.SessionAuth("/stash/login")
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// without session should redirect to /stash/login
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Equal(t, "/stash/login", rec.Header().Get("Location"))
 }
 
 func TestAuth_TokenAuth(t *testing.T) {

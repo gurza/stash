@@ -11,6 +11,11 @@
 #   htpasswd -bnBC 10 "" yourpassword | tr -d ':'
 #
 # Token format: token:prefix:permissions (e.g., "mytoken:*:rw" or "readonly:app/*:r")
+#
+# For subpath deployment (e.g., example.com/stash), add to stash environment:
+#   - STASH_SERVER_BASE_URL=/stash
+# And update reproxy labels (forward path intact, do not strip):
+#   - reproxy.route=^/stash/
 
 services:
   reproxy:

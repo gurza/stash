@@ -76,6 +76,7 @@ stash --db="postgres://user:pass@localhost:5432/stash?sslmode=disable"
 | `-d, --db` | `STASH_DB` | `stash.db` | Database URL (SQLite file or postgres://...) |
 | `--server.address` | `STASH_SERVER_ADDRESS` | `:8484` | Server listen address |
 | `--server.read-timeout` | `STASH_SERVER_READ_TIMEOUT` | `5s` | Read timeout (duration format) |
+| `--server.base-url` | `STASH_SERVER_BASE_URL` | - | Base URL path for reverse proxy (e.g., `/stash`) |
 | `--auth.password-hash` | `STASH_AUTH_PASSWORD_HASH` | - | bcrypt hash for admin password (enables auth) |
 | `--auth.token` | `STASH_AUTH_AUTH_TOKEN` | - | API token with prefix permissions (repeatable) |
 | `--auth.login-ttl` | `STASH_AUTH_LOGIN_TTL` | `24h` | Login session TTL (duration format) |
@@ -88,6 +89,25 @@ stash --db="postgres://user:pass@localhost:5432/stash?sslmode=disable"
 | SQLite (file) | `stash.db`, `./data/stash.db`, `file:stash.db` |
 | SQLite (memory) | `:memory:` |
 | PostgreSQL | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
+
+### Subpath Deployment
+
+To serve stash at a subpath (e.g., `example.com/stash`), use `--server.base-url`:
+
+```bash
+stash --server.base-url=/stash
+```
+
+The base URL must start with `/` and have no trailing slash. All routes, URLs, and cookies will be prefixed accordingly.
+
+When using a reverse proxy, forward requests with the path intact (do not strip the prefix). Example reproxy configuration:
+
+```yaml
+labels:
+  - reproxy.server=example.com
+  - reproxy.route=^/stash/
+  - reproxy.port=8484
+```
 
 ## Authentication
 

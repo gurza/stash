@@ -385,3 +385,107 @@ func TestSignals(t *testing.T) {
 		signals(cancel)
 	})
 }
+
+func TestValidateBaseURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"empty", "", "", false},
+		{"valid", "/stash", "/stash", false},
+		{"valid nested", "/app/stash", "/app/stash", false},
+		{"strips trailing slash", "/stash/", "/stash", false},
+		{"root only", "/", "", false},
+		{"missing leading slash", "stash", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := validateBaseURL(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIntegration_WithBaseURL(t *testing.T) {
+	// setup options with base URL
+	tmpDir := t.TempDir()
+	opts.DB = filepath.Join(tmpDir, "test.db")
+	opts.Server.Address = "127.0.0.1:18488"
+	opts.Server.ReadTimeout = 5 * time.Second
+	opts.Server.BaseURL = "/stash"
+	opts.Auth.PasswordHash = ""
+	opts.Auth.Tokens = nil
+
+	// start server in background
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx)
+	}()
+
+	// wait for server to start
+	waitForServer(t, "http://127.0.0.1:18488/stash/ping", 2*time.Second)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	t.Run("put and get value via base URL", func(t *testing.T) {
+		// put value
+		req, err := http.NewRequest(http.MethodPut, "http://127.0.0.1:18488/stash/kv/test/key1", bytes.NewBufferString("value1"))
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// get value
+		resp, err = client.Get("http://127.0.0.1:18488/stash/kv/test/key1")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "value1", string(body))
+	})
+
+	t.Run("base URL without trailing slash redirects", func(t *testing.T) {
+		noRedirectClient := &http.Client{
+			Timeout: 5 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		resp, err := noRedirectClient.Get("http://127.0.0.1:18488/stash")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusMovedPermanently, resp.StatusCode)
+		assert.Equal(t, "/stash/", resp.Header.Get("Location"))
+	})
+
+	t.Run("root path returns 404", func(t *testing.T) {
+		resp, err := client.Get("http://127.0.0.1:18488/kv/test")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	// shutdown
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down in time")
+	}
+
+	// reset base URL for other tests
+	opts.Server.BaseURL = ""
+}

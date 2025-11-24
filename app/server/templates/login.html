@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Stash</title>
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/svg+xml" href="{{.BaseURL}}/static/favicon.svg">
+    <link rel="stylesheet" href="{{.BaseURL}}/static/style.css">
 </head>
 <body>
     <div class="container">
@@ -19,7 +19,7 @@
                 <div class="error-message">{{.Error}}</div>
                 {{end}}
 
-                <form method="POST" action="/login" class="login-form">
+                <form method="POST" action="{{.BaseURL}}/login" class="login-form">
                     <div class="form-group">
                         <label for="password">Password</label>
                         <input type="password" id="password" name="password"

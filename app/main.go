@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,6 +25,7 @@ var opts struct {
 	Server struct {
 		Address     string        `long:"address" env:"ADDRESS" default:":8484" description:"server listen address"`
 		ReadTimeout time.Duration `long:"read-timeout" env:"READ_TIMEOUT" default:"5s" description:"read timeout"`
+		BaseURL     string        `long:"base-url" env:"BASE_URL" description:"base URL path for reverse proxy (e.g., /stash)"`
 	} `group:"server" namespace:"server" env-namespace:"STASH_SERVER"`
 
 	Auth struct {
@@ -75,7 +77,15 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	baseURL, err := validateBaseURL(opts.Server.BaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+
 	log.Printf("[INFO] starting stash server on %s", opts.Server.Address)
+	if baseURL != "" {
+		log.Printf("[INFO] base URL: %s", baseURL)
+	}
 	if opts.Auth.PasswordHash != "" {
 		log.Printf("[INFO] authentication enabled with %d API token(s)", len(opts.Auth.Tokens))
 	}
@@ -95,6 +105,7 @@ func run(ctx context.Context) error {
 		PasswordHash: opts.Auth.PasswordHash,
 		AuthTokens:   opts.Auth.Tokens,
 		LoginTTL:     opts.Auth.LoginTTL,
+		BaseURL:      baseURL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize server: %w", err)
@@ -104,6 +115,18 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("server failed: %w", err)
 	}
 	return nil
+}
+
+// validateBaseURL validates and normalizes the base URL.
+// Returns empty string for empty input, ensures it starts with / and has no trailing /.
+func validateBaseURL(baseURL string) (string, error) {
+	if baseURL == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(baseURL, "/") {
+		return "", fmt.Errorf("base URL must start with /")
+	}
+	return strings.TrimSuffix(baseURL, "/"), nil
 }
 
 func setupLogs() io.Writer {

@@ -5,7 +5,7 @@
     {{range .Keys}}
     <div class="key-card">
         <div class="key-card-header"
-             hx-get="/web/keys/view/{{.Key | urlEncode}}"
+             hx-get="{{$.BaseURL}}/web/keys/view/{{.Key | urlEncode}}"
              hx-target="#modal-content"
              hx-swap="innerHTML">
             <span class="key-card-name">{{.Key}}</span>
@@ -16,11 +16,11 @@
         </div>
         <div class="key-card-actions">
             <button class="btn btn-secondary btn-small"
-                    hx-get="/web/keys/edit/{{.Key | urlEncode}}"
+                    hx-get="{{$.BaseURL}}/web/keys/edit/{{.Key | urlEncode}}"
                     hx-target="#modal-content"
                     hx-swap="innerHTML">Edit</button>
             <button class="btn btn-danger btn-small"
-                    onclick="showConfirmDelete('{{.Key | js}}', '/web/keys/{{.Key | urlEncode}}')">Delete</button>
+                    onclick="showConfirmDelete('{{.Key | js}}', '{{$.BaseURL}}/web/keys/{{.Key | urlEncode}}')">Delete</button>
         </div>
     </div>
     {{end}}
@@ -39,7 +39,7 @@
     <tbody>
         {{range .Keys}}
         <tr class="clickable-row"
-            hx-get="/web/keys/view/{{.Key | urlEncode}}"
+            hx-get="{{$.BaseURL}}/web/keys/view/{{.Key | urlEncode}}"
             hx-target="#modal-content"
             hx-swap="innerHTML"
             hx-trigger="click target:td:not(.actions-cell)">
@@ -49,11 +49,11 @@
             <td class="date-cell">{{.CreatedAt | formatTime}}</td>
             <td class="actions-cell">
                 <button class="btn btn-secondary btn-small"
-                        hx-get="/web/keys/edit/{{.Key | urlEncode}}"
+                        hx-get="{{$.BaseURL}}/web/keys/edit/{{.Key | urlEncode}}"
                         hx-target="#modal-content"
                         hx-swap="innerHTML">Edit</button>
                 <button class="btn btn-danger btn-small"
-                        onclick="showConfirmDelete('{{.Key | js}}', '/web/keys/{{.Key | urlEncode}}')">Delete</button>
+                        onclick="showConfirmDelete('{{.Key | js}}', '{{$.BaseURL}}/web/keys/{{.Key | urlEncode}}')">Delete</button>
             </td>
         </tr>
         {{end}}
@@ -72,7 +72,7 @@
 <div class="empty-state">
     <p>No keys stored yet</p>
     <button class="btn btn-primary"
-            hx-get="/web/keys/new"
+            hx-get="{{.BaseURL}}/web/keys/new"
             hx-target="#modal-content"
             hx-swap="innerHTML">
         Create your first key

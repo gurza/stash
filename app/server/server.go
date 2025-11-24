@@ -35,6 +35,7 @@ type Config struct {
 	PasswordHash string        // bcrypt hash for admin password (empty = auth disabled)
 	AuthTokens   []string      // API tokens in format "token:prefix:permissions"
 	LoginTTL     time.Duration // session duration
+	BaseURL      string        // base URL path for reverse proxy (e.g., /stash)
 }
 
 // Server represents the HTTP server.
@@ -42,6 +43,7 @@ type Server struct {
 	store   KVStore
 	cfg     Config
 	version string
+	baseURL string
 	tmpl    *template.Template
 	auth    *Auth
 }
@@ -67,6 +69,7 @@ func New(st KVStore, cfg Config) (*Server, error) {
 		store:   st,
 		cfg:     cfg,
 		version: cfg.Version,
+		baseURL: cfg.BaseURL,
 		tmpl:    tmpl,
 		auth:    auth,
 	}, nil
@@ -76,7 +79,7 @@ func New(st KVStore, cfg Config) (*Server, error) {
 func (s *Server) Run(ctx context.Context) error {
 	httpServer := &http.Server{
 		Addr:              s.cfg.Address,
-		Handler:           s.routes(),
+		Handler:           s.handler(),
 		ReadHeaderTimeout: s.cfg.ReadTimeout,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       30 * time.Second,
@@ -100,6 +103,22 @@ func (s *Server) Run(ctx context.Context) error {
 	return nil
 }
 
+// handler returns the HTTP handler, wrapping routes with base URL support if configured.
+func (s *Server) handler() http.Handler {
+	routes := s.routes()
+	if s.baseURL == "" {
+		return routes
+	}
+	mux := http.NewServeMux()
+	// redirect /base to /base/
+	mux.HandleFunc(s.baseURL, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, s.baseURL+"/", http.StatusMovedPermanently)
+	})
+	// strip prefix for all routes under base URL
+	mux.Handle(s.baseURL+"/", http.StripPrefix(s.baseURL, routes))
+	return mux
+}
+
 // routes configures and returns the HTTP handler with all routes and middleware.
 func (s *Server) routes() http.Handler {
 	router := routegroup.New(http.NewServeMux())
@@ -118,7 +137,7 @@ func (s *Server) routes() http.Handler {
 	// determine auth middleware for protected routes
 	sessionAuth, tokenAuth := NoopAuth, NoopAuth
 	if s.auth.Enabled() {
-		sessionAuth = s.auth.SessionAuth
+		sessionAuth = s.auth.SessionAuth(s.url("/login"))
 		tokenAuth = s.auth.TokenAuth
 	}
 

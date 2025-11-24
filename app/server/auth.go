@@ -297,19 +297,21 @@ func (a *Auth) cleanupExpiredSessions() {
 }
 
 // SessionAuth returns middleware that requires a valid session cookie.
-// Used for web UI routes. Redirects to /login if not authenticated.
-func (a *Auth) SessionAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// check session cookie
-		for _, cookieName := range []string{"__Host-stash-auth", "stash-auth"} {
-			if cookie, err := r.Cookie(cookieName); err == nil && a.ValidateSession(cookie.Value) {
-				next.ServeHTTP(w, r)
-				return
+// Used for web UI routes. Redirects to loginURL if not authenticated.
+func (a *Auth) SessionAuth(loginURL string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// check session cookie
+			for _, cookieName := range []string{"__Host-stash-auth", "stash-auth"} {
+				if cookie, err := r.Cookie(cookieName); err == nil && a.ValidateSession(cookie.Value) {
+					next.ServeHTTP(w, r)
+					return
+				}
 			}
-		}
-		// no valid session, redirect to login
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-	})
+			// no valid session, redirect to login
+			http.Redirect(w, r, loginURL, http.StatusSeeOther)
+		})
+	}
 }
 
 // TokenAuth returns middleware that requires a valid Bearer token with appropriate permissions.

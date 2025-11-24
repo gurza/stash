@@ -19,7 +19,7 @@
 <div class="modal-footer">
     <button class="btn btn-secondary" onclick="hideModal('main-modal')">Close</button>
     <button class="btn btn-primary"
-            hx-get="/web/keys/edit/{{.Key | urlEncode}}"
+            hx-get="{{.BaseURL}}/web/keys/edit/{{.Key | urlEncode}}"
             hx-target="#modal-content"
             hx-swap="innerHTML">Edit</button>
 </div>

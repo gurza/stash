@@ -39,6 +39,7 @@ type templateData struct {
 	Search      string
 	Error       string
 	AuthEnabled bool
+	BaseURL     string
 }
 
 // templateFuncs returns custom template functions.
@@ -176,6 +177,19 @@ func sortModeLabel(mode string) string {
 	}
 }
 
+// url returns the full URL path with the base URL prefix.
+func (s *Server) url(path string) string {
+	return s.baseURL + path
+}
+
+// cookiePath returns the appropriate cookie path based on base URL.
+func (s *Server) cookiePath() string {
+	if s.baseURL == "" {
+		return "/"
+	}
+	return s.baseURL + "/"
+}
+
 // sortKeys sorts keys by the given mode.
 func sortKeys(keys []store.KeyInfo, mode string) {
 	switch mode {
@@ -253,6 +267,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		ViewMode:    getViewMode(r),
 		SortMode:    sortMode,
 		AuthEnabled: s.auth.Enabled(),
+		BaseURL:     s.baseURL,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "base.html", data); err != nil {
@@ -308,6 +323,7 @@ func (s *Server) handleKeyList(w http.ResponseWriter, r *http.Request) {
 		Theme:    getTheme(r),
 		ViewMode: viewMode,
 		SortMode: sortMode,
+		BaseURL:  s.baseURL,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "keys-table", data); err != nil {
@@ -318,8 +334,9 @@ func (s *Server) handleKeyList(w http.ResponseWriter, r *http.Request) {
 // handleKeyNew renders the new key form.
 func (s *Server) handleKeyNew(w http.ResponseWriter, r *http.Request) {
 	data := templateData{
-		IsNew: true,
-		Theme: getTheme(r),
+		IsNew:   true,
+		Theme:   getTheme(r),
+		BaseURL: s.baseURL,
 	}
 	if err := s.tmpl.ExecuteTemplate(w, "form", data); err != nil {
 		log.Printf("[ERROR] failed to execute template: %v", err)
@@ -346,6 +363,7 @@ func (s *Server) handleKeyView(w http.ResponseWriter, r *http.Request) {
 		Value:    displayValue,
 		IsBinary: isBinary,
 		Theme:    getTheme(r),
+		BaseURL:  s.baseURL,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "view", data); err != nil {
@@ -373,6 +391,7 @@ func (s *Server) handleKeyEdit(w http.ResponseWriter, r *http.Request) {
 		Value:    displayValue,
 		IsBinary: isBinary,
 		Theme:    getTheme(r),
+		BaseURL:  s.baseURL,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "form", data); err != nil {
@@ -467,7 +486,7 @@ func (s *Server) handleThemeToggle(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "theme",
 		Value:    newTheme,
-		Path:     "/",
+		Path:     s.cookiePath(),
 		MaxAge:   365 * 24 * 60 * 60, // 1 year
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -489,7 +508,7 @@ func (s *Server) handleViewModeToggle(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "view_mode",
 		Value:    newMode,
-		Path:     "/",
+		Path:     s.cookiePath(),
 		MaxAge:   365 * 24 * 60 * 60, // 1 year
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -517,7 +536,7 @@ func (s *Server) handleSortToggle(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "sort_mode",
 		Value:    newMode,
-		Path:     "/",
+		Path:     s.cookiePath(),
 		MaxAge:   365 * 24 * 60 * 60, // 1 year
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -530,7 +549,8 @@ func (s *Server) handleSortToggle(w http.ResponseWriter, r *http.Request) {
 // handleLoginForm renders the login page.
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	data := templateData{
-		Theme: getTheme(r),
+		Theme:   getTheme(r),
+		BaseURL: s.baseURL,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "login.html", data); err != nil {
@@ -564,24 +584,25 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// set cookie - use __Host- prefix for enhanced security over HTTPS
+	// set cookie - use __Host- prefix for enhanced security over HTTPS (only when no base URL)
+	// __Host- prefix requires Path="/" which doesn't work with base URL
 	cookieName := "stash-auth"
 	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
-	if secure {
+	if secure && s.baseURL == "" {
 		cookieName = "__Host-stash-auth"
 	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
-		Path:     "/",
+		Path:     s.cookiePath(),
 		MaxAge:   int(s.auth.LoginTTL().Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 		Secure:   secure,
 	})
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, s.url("/"), http.StatusSeeOther)
 }
 
 // handleLogout logs the user out by clearing the session.
@@ -595,37 +616,41 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 
-	// clear both cookies
+	// clear both cookies - need both paths for compatibility
 	http.SetCookie(w, &http.Cookie{
 		Name:     "stash-auth",
 		Value:    "",
-		Path:     "/",
+		Path:     s.cookiePath(),
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 		Secure:   secure,
 	})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "__Host-stash-auth",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		Secure:   true,
-	})
+	// clear __Host- cookie if baseURL is empty (it requires Path="/")
+	if s.baseURL == "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "__Host-stash-auth",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+			Secure:   true,
+		})
+	}
 
 	// tell HTMX to perform a full page refresh
 	w.Header().Set("HX-Refresh", "true")
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, s.url("/login"), http.StatusSeeOther)
 }
 
 // renderLoginError renders the login page with an error message.
 func (s *Server) renderLoginError(w http.ResponseWriter, r *http.Request, errMsg string) {
 	data := templateData{
-		Theme: getTheme(r),
-		Error: errMsg,
+		Theme:   getTheme(r),
+		Error:   errMsg,
+		BaseURL: s.baseURL,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusUnauthorized)

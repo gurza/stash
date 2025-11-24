@@ -225,6 +225,81 @@ func TestServer_New_InvalidTokens(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to initialize auth")
 }
 
+func TestServer_Handler_BaseURL(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		GetFunc: func(key string) ([]byte, error) {
+			if key == "testkey" {
+				return []byte("testvalue"), nil
+			}
+			return nil, store.ErrNotFound
+		},
+		SetFunc:  func(key string, value []byte) error { return nil },
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+
+	t.Run("without base URL routes work at root", func(t *testing.T) {
+		srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: ""})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/kv/testkey", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "testvalue", rec.Body.String())
+	})
+
+	t.Run("with base URL routes work under prefix", func(t *testing.T) {
+		srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/stash/kv/testkey", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "testvalue", rec.Body.String())
+	})
+
+	t.Run("base URL redirects to trailing slash", func(t *testing.T) {
+		srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/stash", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusMovedPermanently, rec.Code)
+		assert.Equal(t, "/stash/", rec.Header().Get("Location"))
+	})
+
+	t.Run("with base URL root path still accessible via prefix", func(t *testing.T) {
+		srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/stash/ping", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "pong", rec.Body.String())
+	})
+
+	t.Run("with base URL set correctly passes to KV API", func(t *testing.T) {
+		srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/app/stash"})
+		require.NoError(t, err)
+
+		body := bytes.NewBufferString("newvalue")
+		req := httptest.NewRequest(http.MethodPut, "/app/stash/kv/newkey", body)
+		rec := httptest.NewRecorder()
+		srv.handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, st.SetCalls(), 1)
+		assert.Equal(t, "newkey", st.SetCalls()[0].Key)
+	})
+}
+
 func newTestServer(t *testing.T, st KVStore) *Server {
 	t.Helper()
 	srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test"})

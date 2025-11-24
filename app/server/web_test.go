@@ -681,3 +681,53 @@ func TestHandleLogout(t *testing.T) {
 		}
 	}
 }
+
+func TestServer_URL(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+
+	tests := []struct {
+		name    string
+		baseURL string
+		path    string
+		want    string
+	}{
+		{name: "empty base URL", baseURL: "", path: "/web/keys", want: "/web/keys"},
+		{name: "with base URL", baseURL: "/stash", path: "/web/keys", want: "/stash/web/keys"},
+		{name: "nested base URL", baseURL: "/app/stash", path: "/kv/test", want: "/app/stash/kv/test"},
+		{name: "root path", baseURL: "/stash", path: "/", want: "/stash/"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, BaseURL: tc.baseURL})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, srv.url(tc.path))
+		})
+	}
+}
+
+func TestServer_CookiePath(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+
+	tests := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{name: "empty base URL", baseURL: "", want: "/"},
+		{name: "with base URL", baseURL: "/stash", want: "/stash/"},
+		{name: "nested base URL", baseURL: "/app/stash", want: "/app/stash/"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, BaseURL: tc.baseURL})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, srv.cookiePath())
+		})
+	}
+}
