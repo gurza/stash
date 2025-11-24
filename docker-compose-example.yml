@@ -1,0 +1,59 @@
+# Example docker-compose setup with reproxy (SSL), stash, and PostgreSQL
+#
+# Usage:
+#   1. Copy this file to docker-compose.yml
+#   2. Replace stash.example.com with your domain
+#   3. Set STASH_AUTH_PASSWORD_HASH and STASH_AUTH_TOKEN in .env or inline
+#   4. Change postgres password (in both postgres and stash services)
+#   5. Run: docker-compose up -d
+#
+# Generate password hash:
+#   htpasswd -bnBC 10 "" yourpassword | tr -d ':'
+#
+# Token format: token:prefix:permissions (e.g., "mytoken:*:rw" or "readonly:app/*:r")
+
+services:
+  reproxy:
+    image: umputun/reproxy:master
+    container_name: reproxy
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./var/ssl:/srv/var/ssl
+    environment:
+      - TZ=America/Chicago
+      - DOCKER_ENABLED=true
+      - SSL_TYPE=auto
+      - SSL_ACME_FQDN=stash.example.com
+      - SSL_ACME_LOCATION=/srv/var/ssl
+
+  stash:
+    image: ghcr.io/umputun/stash:latest
+    container_name: stash
+    hostname: stash
+    depends_on:
+      - postgres
+    environment:
+      - STASH_DB=postgres://stash:change-me-secret@postgres:5432/stash?sslmode=disable
+      - STASH_AUTH_PASSWORD_HASH=${STASH_AUTH_PASSWORD_HASH}
+      - STASH_AUTH_AUTH_TOKEN=${STASH_AUTH_TOKEN}
+    labels:
+      - reproxy.server=stash.example.com
+      - reproxy.route=^/(.*)
+      - reproxy.dest=/$1
+      - reproxy.port=8484
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=stash
+      - POSTGRES_PASSWORD=change-me-secret
+      - POSTGRES_DB=stash
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

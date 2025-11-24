@@ -245,6 +245,29 @@ volumes:
   postgres_data:
 ```
 
+### Production Setup with SSL
+
+See [`docker-compose-example.yml`](docker-compose-example.yml) for a complete production setup with:
+- [Reproxy](https://github.com/umputun/reproxy) reverse proxy with automatic SSL (Let's Encrypt)
+- PostgreSQL database
+- Authentication enabled
+
+```bash
+# copy and customize the example
+cp docker-compose-example.yml docker-compose.yml
+
+# set your domain in SSL_ACME_FQDN and reproxy.server label
+# generate password hash
+htpasswd -bnBC 10 "" "yourpassword" | tr -d ':'
+
+# create .env file with auth settings
+echo 'STASH_AUTH_PASSWORD_HASH=$2a$10$...' > .env
+echo 'STASH_AUTH_TOKEN=mytoken:*:rw' >> .env
+
+# start services
+docker-compose up -d
+```
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
