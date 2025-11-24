@@ -183,14 +183,25 @@ func TestMatchPrefix(t *testing.T) {
 }
 
 func TestAuth_ValidatePassword(t *testing.T) {
-	// bcrypt hash for "secret"
-	hash := "$2a$10$N9qo8uLOickgx2ZMRZoMye/IQPBKM.IJklnlj.RLXNE7QGIBbRPiO"
+	// bcrypt hash for "testpass"
+	hash := "$2a$10$mYptn.gre3pNHlkiErjUkuCqVZgkOjWmSG5JzlKqPESw/TU5dtGB6"
 	auth, err := NewAuth(hash, nil, time.Hour)
 	require.NoError(t, err)
 
-	assert.False(t, auth.ValidatePassword("wrong"))
-	// note: the hash above is for a different password, so this won't match
-	// using a real hash for testing
+	tests := []struct {
+		name     string
+		password string
+		want     bool
+	}{
+		{"correct password", "testpass", true},
+		{"wrong password", "wrong", false},
+		{"empty password", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, auth.ValidatePassword(tt.password))
+		})
+	}
 }
 
 func TestAuth_CheckPermission(t *testing.T) {
@@ -378,4 +389,74 @@ func TestAuth_TokenAuth_Permissions(t *testing.T) {
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestMaskToken(t *testing.T) {
+	tests := []struct {
+		token string
+		want  string
+	}{
+		{"", "****"},
+		{"a", "****"},
+		{"abc", "****"},
+		{"abcd", "****"},
+		{"abcde", "abcd****"},
+		{"longtoken123", "long****"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.token, func(t *testing.T) {
+			assert.Equal(t, tt.want, maskToken(tt.token))
+		})
+	}
+}
+
+func TestAuth_LoginTTL(t *testing.T) {
+	t.Run("nil auth returns default 24h", func(t *testing.T) {
+		var auth *Auth
+		assert.Equal(t, 24*time.Hour, auth.LoginTTL())
+	})
+
+	t.Run("returns configured value", func(t *testing.T) {
+		auth, err := NewAuth("$2a$10$hash", nil, 2*time.Hour)
+		require.NoError(t, err)
+		assert.Equal(t, 2*time.Hour, auth.LoginTTL())
+	})
+
+	t.Run("default when zero", func(t *testing.T) {
+		auth, err := NewAuth("$2a$10$hash", nil, 0)
+		require.NoError(t, err)
+		assert.Equal(t, 24*time.Hour, auth.LoginTTL())
+	})
+}
+
+func TestPermission_String(t *testing.T) {
+	tests := []struct {
+		perm Permission
+		want string
+	}{
+		{PermissionNone, "none"},
+		{PermissionRead, "r"},
+		{PermissionWrite, "w"},
+		{PermissionReadWrite, "rw"},
+		{Permission(99), "none"}, // unknown
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.perm.String())
+		})
+	}
+}
+
+func TestAuth_GetTokenACL_NilAuth(t *testing.T) {
+	var auth *Auth
+	acl, ok := auth.GetTokenACL("anytoken")
+	assert.False(t, ok)
+	assert.Empty(t, acl.Token)
+}
+
+func TestAuth_CreateSession_NilAuth(t *testing.T) {
+	var auth *Auth
+	_, err := auth.CreateSession()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auth not enabled")
 }

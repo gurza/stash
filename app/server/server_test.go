@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,28 +59,30 @@ func TestServer_HandleGet(t *testing.T) {
 }
 
 func TestServer_HandleSet(t *testing.T) {
-	data := make(map[string][]byte)
-	st := &mocks.KVStoreMock{
-		SetFunc: func(key string, value []byte) error {
-			data[key] = value
-			return nil
-		},
-		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
-	}
-	srv := newTestServer(t, st)
-
 	t.Run("set new key", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			SetFunc:  func(key string, value []byte) error { return nil },
+			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
 		body := bytes.NewBufferString("newvalue")
 		req := httptest.NewRequest(http.MethodPut, "/kv/newkey", body)
 		rec := httptest.NewRecorder()
 		srv.routes().ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Equal(t, []byte("newvalue"), data["newkey"])
+		require.Len(t, st.SetCalls(), 1)
+		assert.Equal(t, "newkey", st.SetCalls()[0].Key)
+		assert.Equal(t, []byte("newvalue"), st.SetCalls()[0].Value)
 	})
 
 	t.Run("update existing key", func(t *testing.T) {
-		data["existing"] = []byte("old")
+		st := &mocks.KVStoreMock{
+			SetFunc:  func(key string, value []byte) error { return nil },
+			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
 
 		body := bytes.NewBufferString("updated")
 		req := httptest.NewRequest(http.MethodPut, "/kv/existing", body)
@@ -87,50 +90,61 @@ func TestServer_HandleSet(t *testing.T) {
 		srv.routes().ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Equal(t, []byte("updated"), data["existing"])
+		require.Len(t, st.SetCalls(), 1)
+		assert.Equal(t, "existing", st.SetCalls()[0].Key)
+		assert.Equal(t, []byte("updated"), st.SetCalls()[0].Value)
 	})
 
 	t.Run("set key with slashes", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			SetFunc:  func(key string, value []byte) error { return nil },
+			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
 		body := bytes.NewBufferString("nested")
 		req := httptest.NewRequest(http.MethodPut, "/kv/a/b/c", body)
 		rec := httptest.NewRecorder()
 		srv.routes().ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Equal(t, []byte("nested"), data["a/b/c"])
+		require.Len(t, st.SetCalls(), 1)
+		assert.Equal(t, "a/b/c", st.SetCalls()[0].Key)
+		assert.Equal(t, []byte("nested"), st.SetCalls()[0].Value)
 	})
 }
 
 func TestServer_HandleDelete(t *testing.T) {
-	data := map[string][]byte{"todelete": []byte("value")}
-	st := &mocks.KVStoreMock{
-		DeleteFunc: func(key string) error {
-			if _, ok := data[key]; !ok {
-				return store.ErrNotFound
-			}
-			delete(data, key)
-			return nil
-		},
-		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
-	}
-	srv := newTestServer(t, st)
-
 	t.Run("delete existing key", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			DeleteFunc: func(key string) error { return nil },
+			ListFunc:   func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
 		req := httptest.NewRequest(http.MethodDelete, "/kv/todelete", http.NoBody)
 		rec := httptest.NewRecorder()
 		srv.routes().ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusNoContent, rec.Code)
-		_, exists := data["todelete"]
-		assert.False(t, exists)
+		require.Len(t, st.DeleteCalls(), 1)
+		assert.Equal(t, "todelete", st.DeleteCalls()[0].Key)
 	})
 
 	t.Run("delete nonexistent key returns 404", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			DeleteFunc: func(key string) error { return store.ErrNotFound },
+			ListFunc:   func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
 		req := httptest.NewRequest(http.MethodDelete, "/kv/nonexistent", http.NoBody)
 		rec := httptest.NewRecorder()
 		srv.routes().ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
+		require.Len(t, st.DeleteCalls(), 1)
+		assert.Equal(t, "nonexistent", st.DeleteCalls()[0].Key)
 	})
 }
 
@@ -146,6 +160,69 @@ func TestServer_Ping(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "pong", rec.Body.String())
+}
+
+func TestServer_HandleGet_InternalError(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		GetFunc:  func(key string) ([]byte, error) { return nil, errors.New("db error") },
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	req := httptest.NewRequest(http.MethodGet, "/kv/testkey", http.NoBody)
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Len(t, st.GetCalls(), 1)
+	assert.Equal(t, "testkey", st.GetCalls()[0].Key)
+}
+
+func TestServer_HandleSet_InternalError(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		SetFunc:  func(key string, value []byte) error { return errors.New("db error") },
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	body := bytes.NewBufferString("value")
+	req := httptest.NewRequest(http.MethodPut, "/kv/testkey", body)
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Len(t, st.SetCalls(), 1)
+	assert.Equal(t, "testkey", st.SetCalls()[0].Key)
+}
+
+func TestServer_HandleDelete_InternalError(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		DeleteFunc: func(key string) error { return errors.New("db error") },
+		ListFunc:   func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	req := httptest.NewRequest(http.MethodDelete, "/kv/testkey", http.NoBody)
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Len(t, st.DeleteCalls(), 1)
+	assert.Equal(t, "testkey", st.DeleteCalls()[0].Key)
+}
+
+func TestServer_New_InvalidTokens(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	_, err := New(st, Config{
+		Address:      ":8080",
+		ReadTimeout:  5 * time.Second,
+		PasswordHash: "$2a$10$hash",
+		AuthTokens:   []string{"invalid"}, // bad format
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to initialize auth")
 }
 
 func newTestServer(t *testing.T, st KVStore) *Server {

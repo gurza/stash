@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -259,4 +260,424 @@ func TestHandleKeyList(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "alpha")
 		assert.NotContains(t, rec.Body.String(), ">beta<")
 	})
+}
+
+func TestHandleKeyNew(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	req := httptest.NewRequest(http.MethodGet, "/web/keys/new", http.NoBody)
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Create Key")
+}
+
+func TestHandleKeyView(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		GetFunc: func(key string) ([]byte, error) {
+			if key == "testkey" {
+				return []byte("testvalue"), nil
+			}
+			return nil, store.ErrNotFound
+		},
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	t.Run("existing key", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/web/keys/view/testkey", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), "testvalue")
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/web/keys/view/missing", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleKeyEdit(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		GetFunc: func(key string) ([]byte, error) {
+			if key == "editkey" {
+				return []byte("editvalue"), nil
+			}
+			return nil, store.ErrNotFound
+		},
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	t.Run("existing key", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/web/keys/edit/editkey", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), "editvalue")
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/web/keys/edit/missing", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleKeyCreate(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		SetFunc:  func(key string, value []byte) error { return nil },
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	req := httptest.NewRequest(http.MethodPost, "/web/keys", http.NoBody)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.PostForm = map[string][]string{
+		"key":   {"newkey"},
+		"value": {"newvalue"},
+	}
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, st.SetCalls(), 1)
+	assert.Equal(t, "newkey", st.SetCalls()[0].Key)
+	assert.Equal(t, "newvalue", string(st.SetCalls()[0].Value))
+}
+
+func TestHandleKeyUpdate(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		SetFunc:  func(key string, value []byte) error { return nil },
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	req := httptest.NewRequest(http.MethodPut, "/web/keys/updatekey", http.NoBody)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.PostForm = map[string][]string{
+		"value": {"updated"},
+	}
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, st.SetCalls(), 1)
+	assert.Equal(t, "updatekey", st.SetCalls()[0].Key)
+	assert.Equal(t, "updated", string(st.SetCalls()[0].Value))
+}
+
+func TestHandleKeyDelete(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			DeleteFunc: func(key string) error { return nil },
+			ListFunc:   func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
+		req := httptest.NewRequest(http.MethodDelete, "/web/keys/deletekey", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, st.DeleteCalls(), 1)
+		assert.Equal(t, "deletekey", st.DeleteCalls()[0].Key)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			DeleteFunc: func(key string) error { return store.ErrNotFound },
+			ListFunc:   func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
+		req := httptest.NewRequest(http.MethodDelete, "/web/keys/missing", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("internal error", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			DeleteFunc: func(key string) error { return errors.New("db error") },
+			ListFunc:   func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
+		req := httptest.NewRequest(http.MethodDelete, "/web/keys/errorkey", http.NoBody)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
+func TestHandleKeyCreate_Errors(t *testing.T) {
+	t.Run("empty key", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			SetFunc:  func(key string, value []byte) error { return nil },
+			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
+		req := httptest.NewRequest(http.MethodPost, "/web/keys", http.NoBody)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.PostForm = map[string][]string{"key": {""}, "value": {"val"}}
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Empty(t, st.SetCalls())
+	})
+
+	t.Run("store error", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			SetFunc:  func(key string, value []byte) error { return errors.New("db error") },
+			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
+		req := httptest.NewRequest(http.MethodPost, "/web/keys", http.NoBody)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.PostForm = map[string][]string{"key": {"testkey"}, "value": {"val"}}
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
+func TestHandleKeyUpdate_Errors(t *testing.T) {
+	t.Run("store error", func(t *testing.T) {
+		st := &mocks.KVStoreMock{
+			SetFunc:  func(key string, value []byte) error { return errors.New("db error") },
+			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+		}
+		srv := newTestServer(t, st)
+
+		req := httptest.NewRequest(http.MethodPut, "/web/keys/testkey", http.NoBody)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.PostForm = map[string][]string{"value": {"updated"}}
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
+func TestHandleThemeToggle(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	tests := []struct {
+		name     string
+		current  string
+		expected string
+	}{
+		{"no theme to dark", "", "dark"},
+		{"light to dark", "light", "dark"},
+		{"dark to light", "dark", "light"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/web/theme", http.NoBody)
+			if tc.current != "" {
+				req.AddCookie(&http.Cookie{Name: "theme", Value: tc.current})
+			}
+			rec := httptest.NewRecorder()
+			srv.routes().ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+			var themeCookie *http.Cookie
+			for _, c := range rec.Result().Cookies() {
+				if c.Name == "theme" {
+					themeCookie = c
+					break
+				}
+			}
+			require.NotNil(t, themeCookie)
+			assert.Equal(t, tc.expected, themeCookie.Value)
+		})
+	}
+}
+
+func TestHandleViewModeToggle(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	srv := newTestServer(t, st)
+
+	tests := []struct {
+		name     string
+		current  string
+		expected string
+	}{
+		{"no mode to cards", "", "cards"},
+		{"grid to cards", "grid", "cards"},
+		{"cards to grid", "cards", "grid"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/web/view-mode", http.NoBody)
+			if tc.current != "" {
+				req.AddCookie(&http.Cookie{Name: "view_mode", Value: tc.current})
+			}
+			rec := httptest.NewRecorder()
+			srv.routes().ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+			var viewCookie *http.Cookie
+			for _, c := range rec.Result().Cookies() {
+				if c.Name == "view_mode" {
+					viewCookie = c
+					break
+				}
+			}
+			require.NotNil(t, viewCookie)
+			assert.Equal(t, tc.expected, viewCookie.Value)
+		})
+	}
+}
+
+func TestGetTheme(t *testing.T) {
+	tests := []struct {
+		name     string
+		cookie   string
+		expected string
+	}{
+		{"no cookie", "", ""},
+		{"light", "light", "light"},
+		{"dark", "dark", "dark"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			if tc.cookie != "" {
+				req.AddCookie(&http.Cookie{Name: "theme", Value: tc.cookie})
+			}
+			assert.Equal(t, tc.expected, getTheme(req))
+		})
+	}
+}
+
+func TestGetViewMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		cookie   string
+		expected string
+	}{
+		{"no cookie returns grid", "", "grid"},
+		{"grid", "grid", "grid"},
+		{"cards", "cards", "cards"},
+		{"invalid returns grid", "invalid", "grid"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			if tc.cookie != "" {
+				req.AddCookie(&http.Cookie{Name: "view_mode", Value: tc.cookie})
+			}
+			assert.Equal(t, tc.expected, getViewMode(req))
+		})
+	}
+}
+
+func TestHandleLoginForm(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	// bcrypt hash for "testpass"
+	hash := "$2a$10$mYptn.gre3pNHlkiErjUkuCqVZgkOjWmSG5JzlKqPESw/TU5dtGB6"
+	srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, PasswordHash: hash})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/login", http.NoBody)
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Login")
+	assert.Contains(t, rec.Body.String(), "Password")
+}
+
+func TestHandleLogin(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	// bcrypt hash for "testpass"
+	hash := "$2a$10$mYptn.gre3pNHlkiErjUkuCqVZgkOjWmSG5JzlKqPESw/TU5dtGB6"
+	srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, PasswordHash: hash})
+	require.NoError(t, err)
+
+	t.Run("valid password redirects", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/login", http.NoBody)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.PostForm = map[string][]string{"password": {"testpass"}}
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusSeeOther, rec.Code)
+		assert.Equal(t, "/", rec.Header().Get("Location"))
+		// should have auth cookie
+		var authCookie *http.Cookie
+		for _, c := range rec.Result().Cookies() {
+			if c.Name == "stash-auth" || c.Name == "__Host-stash-auth" {
+				authCookie = c
+				break
+			}
+		}
+		require.NotNil(t, authCookie)
+	})
+
+	t.Run("invalid password shows error", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/login", http.NoBody)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.PostForm = map[string][]string{"password": {"wrongpass"}}
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Invalid password")
+	})
+}
+
+func TestHandleLogout(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+	}
+	// bcrypt hash for "testpass"
+	hash := "$2a$10$mYptn.gre3pNHlkiErjUkuCqVZgkOjWmSG5JzlKqPESw/TU5dtGB6"
+	srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second, PasswordHash: hash})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/logout", http.NoBody)
+	req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "somesession"})
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Equal(t, "/login", rec.Header().Get("Location"))
+	// should clear cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "stash-auth" {
+			assert.Equal(t, -1, c.MaxAge)
+		}
+	}
 }

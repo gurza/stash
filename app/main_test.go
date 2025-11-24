@@ -325,3 +325,63 @@ func waitForServer(t *testing.T, url string, timeout time.Duration) {
 	}
 	t.Fatalf("server did not start within %v", timeout)
 }
+
+func TestSetupLogs(t *testing.T) {
+	t.Run("default mode", func(t *testing.T) {
+		opts.Debug = false
+		w := setupLogs()
+		assert.NotNil(t, w)
+	})
+
+	t.Run("debug mode", func(t *testing.T) {
+		opts.Debug = true
+		w := setupLogs()
+		assert.NotNil(t, w)
+		opts.Debug = false // reset
+	})
+}
+
+func TestRun_InvalidDB(t *testing.T) {
+	opts.DB = "/nonexistent/path/to/db.db"
+	opts.Server.Address = "127.0.0.1:18486"
+	opts.Server.ReadTimeout = 5 * time.Second
+	opts.Auth.PasswordHash = ""
+	opts.Auth.Tokens = nil
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := run(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to initialize store")
+}
+
+func TestRun_InvalidAuthToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	opts.DB = filepath.Join(tmpDir, "test.db")
+	opts.Server.Address = "127.0.0.1:18487"
+	opts.Server.ReadTimeout = 5 * time.Second
+	opts.Auth.PasswordHash = "$2a$10$hash"
+	opts.Auth.Tokens = []string{"invalid"} // invalid token format
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := run(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to initialize server")
+
+	// reset
+	opts.Auth.PasswordHash = ""
+	opts.Auth.Tokens = nil
+}
+
+func TestSignals(t *testing.T) {
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// verify signals() doesn't panic
+	require.NotPanics(t, func() {
+		signals(cancel)
+	})
+}
