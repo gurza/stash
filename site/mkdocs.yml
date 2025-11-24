@@ -6,7 +6,7 @@ site_description: >-
 
 repo_name: umputun/stash
 repo_url: https://github.com/umputun/stash
-copyright: Some rights reserved &copy; 2024 - 2025 Umputun
+copyright: Some rights reserved &copy; 2025 Umputun
 
 theme:
   name: material
