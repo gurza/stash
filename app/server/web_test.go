@@ -731,3 +731,54 @@ func TestServer_CookiePath(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateModalDimensions(t *testing.T) {
+	st := &mocks.KVStoreMock{ListFunc: func() ([]store.KeyInfo, error) { return nil, nil }}
+	srv, err := New(st, Config{Address: ":8080", ReadTimeout: 5 * time.Second})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		value         string
+		wantWidth     int
+		wantHeight    int
+		wantWidthMin  int
+		wantWidthMax  int
+		wantHeightMin int
+		wantHeightMax int
+	}{
+		{name: "empty value", value: "", wantWidth: 600, wantHeight: 104},
+		{name: "short value", value: "hello", wantWidth: 600, wantHeight: 104},
+		{name: "medium line 60 chars", value: "123456789012345678901234567890123456789012345678901234567890",
+			wantWidth: 600, wantHeight: 104},
+		{name: "long line hits max width", value: string(make([]byte, 200)),
+			wantWidth: 1200, wantHeight: 104},
+		{name: "few lines uses min lines", value: "line1\nline2", wantWidth: 600, wantHeight: 104},
+		{name: "10 lines", value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10",
+			wantWidth: 600, wantHeight: 224},
+		{name: "many lines hits max height", value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20",
+			wantWidth: 600, wantHeight: 384},
+		{name: "cyrillic uses rune count not bytes", value: "привет мир",
+			wantWidth: 600, wantHeight: 104},
+		{name: "japanese uses rune count not bytes", value: "こんにちは世界",
+			wantWidthMin: 600, wantWidthMax: 700, wantHeightMin: 104, wantHeightMax: 104},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			width, height := srv.calculateModalDimensions(tc.value)
+			if tc.wantWidthMin > 0 {
+				assert.GreaterOrEqual(t, width, tc.wantWidthMin, "width should be >= min")
+				assert.LessOrEqual(t, width, tc.wantWidthMax, "width should be <= max")
+			} else {
+				assert.Equal(t, tc.wantWidth, width, "width mismatch")
+			}
+			if tc.wantHeightMin > 0 {
+				assert.GreaterOrEqual(t, height, tc.wantHeightMin, "height should be >= min")
+				assert.LessOrEqual(t, height, tc.wantHeightMax, "height should be <= max")
+			} else {
+				assert.Equal(t, tc.wantHeight, height, "height mismatch")
+			}
+		})
+	}
+}

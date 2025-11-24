@@ -28,18 +28,20 @@ var templatesFS embed.FS
 
 // templateData holds data passed to templates.
 type templateData struct {
-	Keys        []store.KeyInfo
-	Key         string
-	Value       string
-	IsBinary    bool
-	IsNew       bool
-	Theme       string
-	ViewMode    string
-	SortMode    string
-	Search      string
-	Error       string
-	AuthEnabled bool
-	BaseURL     string
+	Keys           []store.KeyInfo
+	Key            string
+	Value          string
+	IsBinary       bool
+	IsNew          bool
+	Theme          string
+	ViewMode       string
+	SortMode       string
+	Search         string
+	Error          string
+	AuthEnabled    bool
+	BaseURL        string
+	ModalWidth     int
+	TextareaHeight int
 }
 
 // templateFuncs returns custom template functions.
@@ -249,6 +251,48 @@ func filterKeys(keys []store.KeyInfo, search string) []store.KeyInfo {
 	return filtered
 }
 
+// calculateModalDimensions estimates modal width and textarea height based on content.
+// returns width and textarea height in pixels.
+func (s *Server) calculateModalDimensions(value string) (width, textareaHeight int) {
+	const minWidth, maxWidth = 600, 1200
+	const charWidth = 8        // approximate width in pixels for monospace 13px font
+	const padding = 100        // approximate padding, margins, and scrollbar
+	const lineHeight = 20      // approximate line height in pixels
+	const minLines = 4         // minimum 4 lines for textarea/value display
+	const maxLines = 18        // maximum lines before scrolling (fits within 400px max-height)
+	const textareaPadding = 24 // textarea padding (12px top + 12px bottom)
+
+	// find longest line and count lines
+	lines := strings.Split(value, "\n")
+	maxLen := 0
+	for _, line := range lines {
+		if runeLen := utf8.RuneCountInString(line); runeLen > maxLen {
+			maxLen = runeLen
+		}
+	}
+	lineCount := len(lines)
+
+	// calculate width with constraints
+	width = maxLen*charWidth + padding
+	if width < minWidth {
+		width = minWidth
+	}
+	if width > maxWidth {
+		width = maxWidth
+	}
+
+	// calculate textarea height based on line count (min 4, max 18 lines)
+	if lineCount < minLines {
+		lineCount = minLines
+	}
+	if lineCount > maxLines {
+		lineCount = maxLines
+	}
+	textareaHeight = lineCount*lineHeight + textareaPadding
+
+	return width, textareaHeight
+}
+
 // handleIndex renders the main page.
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	keys, err := s.store.List()
@@ -358,12 +402,15 @@ func (s *Server) handleKeyView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	displayValue, isBinary := valueForDisplay(value)
+	modalWidth, textareaHeight := s.calculateModalDimensions(displayValue)
 	data := templateData{
-		Key:      key,
-		Value:    displayValue,
-		IsBinary: isBinary,
-		Theme:    getTheme(r),
-		BaseURL:  s.baseURL,
+		Key:            key,
+		Value:          displayValue,
+		IsBinary:       isBinary,
+		Theme:          getTheme(r),
+		BaseURL:        s.baseURL,
+		ModalWidth:     modalWidth,
+		TextareaHeight: textareaHeight,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "view", data); err != nil {
@@ -386,12 +433,15 @@ func (s *Server) handleKeyEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	displayValue, isBinary := valueForDisplay(value)
+	modalWidth, textareaHeight := s.calculateModalDimensions(displayValue)
 	data := templateData{
-		Key:      key,
-		Value:    displayValue,
-		IsBinary: isBinary,
-		Theme:    getTheme(r),
-		BaseURL:  s.baseURL,
+		Key:            key,
+		Value:          displayValue,
+		IsBinary:       isBinary,
+		Theme:          getTheme(r),
+		BaseURL:        s.baseURL,
+		ModalWidth:     modalWidth,
+		TextareaHeight: textareaHeight,
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "form", data); err != nil {

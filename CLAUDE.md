@@ -39,6 +39,8 @@ make lint     # run linter
 make run      # run with logging enabled
 ```
 
+**Note**: CSS, JS, and HTML templates are embedded at compile time. After modifying any static files or templates, you must rebuild (`make build`) and restart the server to see changes.
+
 ## API
 
 ```

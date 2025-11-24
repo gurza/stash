@@ -23,4 +23,8 @@
             hx-target="#modal-content"
             hx-swap="innerHTML">Edit</button>
 </div>
+<style>
+    #main-modal .modal { --modal-width: {{.ModalWidth}}px; }
+    #main-modal .value-content { min-height: {{.TextareaHeight}}px; }
+</style>
 {{end}}

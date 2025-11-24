@@ -38,4 +38,10 @@
         <button type="submit" class="btn btn-primary">{{if .IsNew}}Create{{else}}Save{{end}}</button>
     </div>
 </form>
+{{if not .IsNew}}
+<style>
+    #main-modal .modal { --modal-width: {{.ModalWidth}}px; }
+    #main-modal textarea#value { min-height: {{.TextareaHeight}}px; }
+</style>
+{{end}}
 {{end}}
