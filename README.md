@@ -1,4 +1,4 @@
-# Stash
+# Stash [![Build Status](https://github.com/umputun/stash/workflows/build/badge.svg)](https://github.com/umputun/stash/actions) [![Coverage Status](https://coveralls.io/repos/github/umputun/stash/badge.svg?branch=master)](https://coveralls.io/github/umputun/stash?branch=master)
 
 Lightweight key-value configuration service for centralized config management. Store application settings, feature flags, and shared configuration with a simple HTTP API and web UI. A minimal alternative to Consul KV or etcd for microservices and containerized applications that need a straightforward way to manage configuration without complex infrastructure. Not a secrets vault - see [Security Note](#security-note).
 
