@@ -44,6 +44,7 @@ type KVStore interface {
 type GitStore interface {
 	Commit(key string, value []byte, operation string) error
 	Delete(key string) error
+	Pull() error
 	Push() error
 }
 

@@ -107,9 +107,7 @@ func (s *Server) gitCommit(key string, value []byte, operation string) {
 	}
 
 	if s.cfg.GitPush {
-		if err := s.gitStore.Push(); err != nil {
-			log.Printf("[WARN] git push failed: %v", err)
-		}
+		s.gitPullAndPush()
 	}
 }
 
@@ -126,8 +124,21 @@ func (s *Server) gitDelete(key string) {
 	}
 
 	if s.cfg.GitPush {
-		if err := s.gitStore.Push(); err != nil {
-			log.Printf("[WARN] git push failed: %v", err)
-		}
+		s.gitPullAndPush()
+	}
+}
+
+// gitPullAndPush pulls from remote, then pushes local commits.
+// if pull fails due to merge conflict, logs instructions for manual resolution.
+// note: local commit is already done and preserved even if pull/push fails.
+func (s *Server) gitPullAndPush() {
+	if err := s.gitStore.Pull(); err != nil {
+		log.Printf("[WARN] git pull failed: %v (local commit preserved)", err)
+		log.Printf("[WARN] to sync: cd <git-path> && git pull --rebase && git push")
+		return
+	}
+
+	if err := s.gitStore.Push(); err != nil {
+		log.Printf("[WARN] git push failed: %v (local commit preserved)", err)
 	}
 }

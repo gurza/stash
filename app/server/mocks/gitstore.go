@@ -19,6 +19,9 @@ import (
 //			DeleteFunc: func(key string) error {
 //				panic("mock out the Delete method")
 //			},
+//			PullFunc: func() error {
+//				panic("mock out the Pull method")
+//			},
 //			PushFunc: func() error {
 //				panic("mock out the Push method")
 //			},
@@ -34,6 +37,9 @@ type GitStoreMock struct {
 
 	// DeleteFunc mocks the Delete method.
 	DeleteFunc func(key string) error
+
+	// PullFunc mocks the Pull method.
+	PullFunc func() error
 
 	// PushFunc mocks the Push method.
 	PushFunc func() error
@@ -54,12 +60,16 @@ type GitStoreMock struct {
 			// Key is the key argument value.
 			Key string
 		}
+		// Pull holds details about calls to the Pull method.
+		Pull []struct {
+		}
 		// Push holds details about calls to the Push method.
 		Push []struct {
 		}
 	}
 	lockCommit sync.RWMutex
 	lockDelete sync.RWMutex
+	lockPull   sync.RWMutex
 	lockPush   sync.RWMutex
 }
 
@@ -132,6 +142,33 @@ func (mock *GitStoreMock) DeleteCalls() []struct {
 	mock.lockDelete.RLock()
 	calls = mock.calls.Delete
 	mock.lockDelete.RUnlock()
+	return calls
+}
+
+// Pull calls PullFunc.
+func (mock *GitStoreMock) Pull() error {
+	if mock.PullFunc == nil {
+		panic("GitStoreMock.PullFunc: method is nil but GitStore.Pull was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockPull.Lock()
+	mock.calls.Pull = append(mock.calls.Pull, callInfo)
+	mock.lockPull.Unlock()
+	return mock.PullFunc()
+}
+
+// PullCalls gets all the calls that were made to Pull.
+// Check the length with:
+//
+//	len(mockedGitStore.PullCalls())
+func (mock *GitStoreMock) PullCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockPull.RLock()
+	calls = mock.calls.Pull
+	mock.lockPull.RUnlock()
 	return calls
 }
 

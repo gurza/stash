@@ -247,6 +247,10 @@ git remote add origin git@github.com:user/config-backup.git
 stash server --git.enabled --git.path=/data/.history --git.remote=origin --git.push
 ```
 
+When remote changes exist (someone else pushed), stash will attempt to pull before pushing. If there's a merge conflict, the local commit is preserved and a warning is logged with manual resolution instructions.
+
+**Note**: For local bare repositories on the same machine, use absolute paths (e.g., `/data/backup.git`). Relative paths like `../backup.git` are not supported by the underlying git library.
+
 ### Restore from History
 
 Recover the database to any point in git history:
