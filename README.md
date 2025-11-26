@@ -94,6 +94,7 @@ stash restore --rev=abc1234 --db=/path/to/stash.db --git.path=/data/.history
 | `--git.branch` | `STASH_GIT_BRANCH` | `master` | Git branch name |
 | `--git.remote` | `STASH_GIT_REMOTE` | - | Git remote name (for push) |
 | `--git.push` | `STASH_GIT_PUSH` | `false` | Auto-push after commits |
+| `--git.ssh-key` | `STASH_GIT_SSH_KEY` | - | SSH private key path for git push |
 | `--dbg` | `DEBUG` | `false` | Debug mode |
 
 ### Restore Options
