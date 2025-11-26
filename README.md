@@ -2,6 +2,24 @@
 
 Lightweight key-value configuration service for centralized config management. Store application settings, feature flags, and shared configuration with a simple HTTP API and web UI. A minimal alternative to Consul KV or etcd for microservices and containerized applications that need a straightforward way to manage configuration without complex infrastructure. Not a secrets vault - see [Security Note](#security-note).
 
+## Quick Start
+
+```bash
+# run with docker
+docker run -p 8080:8080 ghcr.io/umputun/stash
+
+# set a value
+curl -X PUT -d 'hello world' http://localhost:8080/kv/greeting
+
+# get the value
+curl http://localhost:8080/kv/greeting
+
+# delete the key
+curl -X DELETE http://localhost:8080/kv/greeting
+```
+
+Web UI available at http://localhost:8080
+
 ## Features
 
 - HTTP API for key-value operations (GET, PUT, DELETE)
