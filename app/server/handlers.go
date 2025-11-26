@@ -91,7 +91,7 @@ func (s *Server) handleSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[DEBUG] set %s (%d bytes, format=%s)", key, len(value), format)
+	log.Printf("[INFO] set %q (%d bytes, format=%s) by %s", key, len(value), format, s.getIdentityForLog(r))
 
 	// commit to git if enabled
 	s.gitCommit(r, key, value, "set")
@@ -118,7 +118,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[DEBUG] delete %s", key)
+	log.Printf("[INFO] delete %q by %s", key, s.getIdentityForLog(r))
 
 	// delete from git if enabled
 	s.gitDelete(r, key)
@@ -195,6 +195,39 @@ func (s *Server) getAuthorFromRequest(r *http.Request) git.Author {
 	}
 
 	return git.DefaultAuthor()
+}
+
+// getIdentityForLog returns identity string for audit logging.
+// returns "user:xxx" for web UI users, "token:xxx" for API tokens, "anonymous" otherwise.
+func (s *Server) getIdentityForLog(r *http.Request) string {
+	if s.auth == nil {
+		return "anonymous"
+	}
+
+	// check session cookie for web UI users
+	for _, cookieName := range sessionCookieNames {
+		cookie, err := r.Cookie(cookieName)
+		if err != nil {
+			continue
+		}
+		if username, valid := s.auth.GetSessionUser(cookie.Value); valid && username != "" {
+			return "user:" + username
+		}
+	}
+
+	// check API token from Authorization header
+	if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if _, ok := s.auth.GetTokenACL(token); ok {
+			prefix := token
+			if len(prefix) > 8 {
+				prefix = prefix[:8]
+			}
+			return "token:" + prefix
+		}
+	}
+
+	return "anonymous"
 }
 
 // gitPullAndPush pulls from remote, then pushes local commits.

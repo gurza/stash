@@ -550,7 +550,7 @@ func (a *Auth) TokenAuth(next http.Handler) http.Handler {
 			}
 			// check user permissions for the key
 			if !a.CheckUserPermission(username, key, needWrite) {
-				log.Printf("[DEBUG] user %q denied %s access to key %q", username, r.Method, key)
+				log.Printf("[INFO] user %q denied %s access to key %q", username, r.Method, key)
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
@@ -574,7 +574,7 @@ func (a *Auth) TokenAuth(next http.Handler) http.Handler {
 		}
 
 		if !a.CheckPermission(token, key, needWrite) {
-			log.Printf("[DEBUG] token %q denied %s access to key %q", maskToken(token), r.Method, key)
+			log.Printf("[INFO] token %q denied %s access to key %q", maskToken(token), r.Method, key)
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
