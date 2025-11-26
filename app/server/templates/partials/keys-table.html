@@ -14,7 +14,7 @@
             <span>{{.Size | formatSize}}</span>
             <span>Updated: {{.UpdatedAt | formatTime}}</span>
         </div>
-        {{if $.CanWrite}}
+        {{if .CanWrite}}
         <div class="key-card-actions">
             <button class="btn btn-edit btn-small"
                     hx-get="{{$.BaseURL}}/web/keys/edit/{{.Key | urlEncode}}"
@@ -51,12 +51,14 @@
             <td class="date-cell">{{.CreatedAt | formatTime}}</td>
             {{if $.CanWrite}}
             <td class="actions-cell">
+                {{if .CanWrite}}
                 <button class="btn btn-edit btn-small"
                         hx-get="{{$.BaseURL}}/web/keys/edit/{{.Key | urlEncode}}"
                         hx-target="#modal-content"
                         hx-swap="innerHTML">Edit</button>
                 <button class="btn btn-danger btn-small"
                         onclick="showConfirmDelete('{{.Key | js}}', '{{$.BaseURL}}/web/keys/{{.Key | urlEncode}}')">Delete</button>
+                {{end}}
             </td>
             {{end}}
         </tr>

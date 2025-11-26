@@ -1177,6 +1177,50 @@ func TestHandleKeyList_PermissionFiltering(t *testing.T) {
 	})
 }
 
+func TestHandleKeyList_MixedPermissions(t *testing.T) {
+	// test that user with mixed permissions (rw on some prefixes, r on others)
+	// sees Edit/Delete buttons only for keys they can write to
+	st := &mocks.KVStoreMock{
+		ListFunc: func() ([]store.KeyInfo, error) {
+			return []store.KeyInfo{
+				{Key: "app/config", Size: 50},
+				{Key: "app/database", Size: 100},
+				{Key: "secrets/password", Size: 20},
+				{Key: "secrets/aws-key", Size: 30},
+			}, nil
+		},
+	}
+	authFile := createMixedPermAuthFile(t)
+	srv, err := New(st, validator.NewService(), Config{Address: ":8080", ReadTimeout: 5 * time.Second, AuthFile: authFile})
+	require.NoError(t, err)
+
+	cookie := loginAndGetCookie(t, srv, "mixed")
+	req := httptest.NewRequest(http.MethodGet, "/web/keys", http.NoBody)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+
+	// user sees all keys they have access to
+	assert.Contains(t, body, "app/config")
+	assert.Contains(t, body, "app/database")
+	assert.Contains(t, body, "secrets/password")
+	assert.Contains(t, body, "secrets/aws-key")
+
+	// action column header should be present (user has write access to some keys)
+	assert.Contains(t, body, `class="actions-cell"`)
+
+	// check that Edit buttons appear for app/* keys (rw access)
+	assert.Contains(t, body, `/web/keys/edit/app%2Fconfig`)
+	assert.Contains(t, body, `/web/keys/edit/app%2Fdatabase`)
+
+	// check that Edit buttons do NOT appear for secrets/* keys (r only access)
+	assert.NotContains(t, body, `/web/keys/edit/secrets%2Fpassword`)
+	assert.NotContains(t, body, `/web/keys/edit/secrets%2Faws-key`)
+}
+
 func TestHandleKeyNew_PermissionEnforcement(t *testing.T) {
 	st := &mocks.KVStoreMock{
 		ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
@@ -1400,6 +1444,25 @@ func createMultiUserAuthFile(t *testing.T) string {
     permissions:
       - prefix: "app/*"
         access: rw
+`
+	dir := t.TempDir()
+	f := filepath.Join(dir, "auth.yml")
+	err := os.WriteFile(f, []byte(content), 0o600)
+	require.NoError(t, err)
+	return f
+}
+
+func createMixedPermAuthFile(t *testing.T) string {
+	t.Helper()
+	// bcrypt hash for "testpass"
+	content := `users:
+  - name: mixed
+    password: "$2a$10$mYptn.gre3pNHlkiErjUkuCqVZgkOjWmSG5JzlKqPESw/TU5dtGB6"
+    permissions:
+      - prefix: "app/*"
+        access: rw
+      - prefix: "secrets/*"
+        access: r
 `
 	dir := t.TempDir()
 	f := filepath.Join(dir, "auth.yml")

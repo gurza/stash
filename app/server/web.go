@@ -26,9 +26,15 @@ var staticFS embed.FS
 //go:embed templates
 var templatesFS embed.FS
 
+// keyWithPermission wraps KeyInfo with per-key write permission.
+type keyWithPermission struct {
+	store.KeyInfo
+	CanWrite bool // user has write permission for this specific key
+}
+
 // templateData holds data passed to templates.
 type templateData struct {
-	Keys           []store.KeyInfo
+	Keys           []keyWithPermission
 	Key            string
 	Value          string
 	HighlightedVal template.HTML // syntax-highlighted value for view modal
@@ -232,6 +238,28 @@ func sortKeys(keys []store.KeyInfo, mode string) {
 	}
 }
 
+// sortKeysWithPerm sorts keys with permission info by the given mode.
+func sortKeysWithPerm(keys []keyWithPermission, mode string) {
+	switch mode {
+	case "key":
+		sort.Slice(keys, func(i, j int) bool {
+			return strings.ToLower(keys[i].Key) < strings.ToLower(keys[j].Key)
+		})
+	case "size":
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].Size > keys[j].Size // largest first
+		})
+	case "created":
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].CreatedAt.After(keys[j].CreatedAt) // newest first
+		})
+	default: // "updated"
+		sort.Slice(keys, func(i, j int) bool {
+			return keys[i].UpdatedAt.After(keys[j].UpdatedAt) // newest first
+		})
+	}
+}
+
 // valueForDisplay converts a byte slice to display string.
 // Returns the string and whether it's binary (base64 encoded).
 func valueForDisplay(value []byte) (string, bool) {
@@ -261,6 +289,21 @@ func filterKeys(keys []store.KeyInfo, search string) []store.KeyInfo {
 	}
 	search = strings.ToLower(search)
 	var filtered []store.KeyInfo
+	for _, k := range keys {
+		if strings.Contains(strings.ToLower(k.Key), search) {
+			filtered = append(filtered, k)
+		}
+	}
+	return filtered
+}
+
+// filterKeysWithPerm filters keys with permission info by search term.
+func filterKeysWithPerm(keys []keyWithPermission, search string) []keyWithPermission {
+	if search == "" {
+		return keys
+	}
+	search = strings.ToLower(search)
+	var filtered []keyWithPermission
 	for _, k := range keys {
 		if strings.Contains(strings.ToLower(k.Key), search) {
 			filtered = append(filtered, k)
@@ -331,15 +374,18 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	for _, k := range allowedKeys {
 		allowedSet[k] = true
 	}
-	var filteredKeys []store.KeyInfo
+	var filteredKeys []keyWithPermission
 	for _, k := range keys {
 		if allowedSet[k.Key] {
-			filteredKeys = append(filteredKeys, k)
+			filteredKeys = append(filteredKeys, keyWithPermission{
+				KeyInfo:  k,
+				CanWrite: s.auth.CheckUserPermission(username, k.Key, true),
+			})
 		}
 	}
 
 	sortMode := getSortMode(r)
-	sortKeys(filteredKeys, sortMode)
+	sortKeysWithPerm(filteredKeys, sortMode)
 
 	data := templateData{
 		Keys:        filteredKeys,
@@ -377,10 +423,13 @@ func (s *Server) handleKeyList(w http.ResponseWriter, r *http.Request) {
 	for _, k := range allowedKeys {
 		allowedSet[k] = true
 	}
-	var filteredKeys []store.KeyInfo
+	var filteredKeys []keyWithPermission
 	for _, k := range keys {
 		if allowedSet[k.Key] {
-			filteredKeys = append(filteredKeys, k)
+			filteredKeys = append(filteredKeys, keyWithPermission{
+				KeyInfo:  k,
+				CanWrite: s.auth.CheckUserPermission(username, k.Key, true),
+			})
 		}
 	}
 
@@ -389,7 +438,7 @@ func (s *Server) handleKeyList(w http.ResponseWriter, r *http.Request) {
 	if search == "" {
 		search = r.FormValue("search")
 	}
-	filteredKeys = filterKeys(filteredKeys, search)
+	filteredKeys = filterKeysWithPerm(filteredKeys, search)
 
 	// check if view_mode was just set via Set-Cookie header (from toggle handler)
 	viewMode := getViewMode(r)
@@ -415,7 +464,7 @@ func (s *Server) handleKeyList(w http.ResponseWriter, r *http.Request) {
 			sortMode = "updated"
 		}
 	}
-	sortKeys(filteredKeys, sortMode)
+	sortKeysWithPerm(filteredKeys, sortMode)
 
 	data := templateData{
 		Keys:     filteredKeys,
