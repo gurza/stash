@@ -36,17 +36,15 @@
             <input type="hidden" name="is_binary" value="true">
             {{end}}
             <textarea id="value" name="value" placeholder="Enter value..."
-                      oninput="var e=document.getElementById('form-error');if(e)e.remove()"
+                      oninput="var e=document.getElementById('form-error');if(e)e.remove();var s=document.getElementById('save-btn');if(s)s.style.display='';var f=document.getElementById('force-btn');if(f)f.style.display='none'"
                       required>{{.Value}}</textarea>
         </div>
     </div>
     <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="hideModal('main-modal')">Cancel</button>
+        <button type="submit" id="save-btn" class="btn btn-primary" {{if .Error}}style="display:none"{{end}}>{{if .IsNew}}Create{{else}}Save{{end}}</button>
         {{if .Error}}
-        <button type="submit" class="btn btn-primary">{{if .IsNew}}Create{{else}}Save{{end}}</button>
-        <button type="submit" name="force" value="true" class="btn btn-danger-filled">Submit Anyway</button>
-        {{else}}
-        <button type="submit" class="btn btn-primary">{{if .IsNew}}Create{{else}}Save{{end}}</button>
+        <button type="submit" id="force-btn" name="force" value="true" class="btn btn-danger-filled">Submit Anyway</button>
         {{end}}
     </div>
 </form>

@@ -532,7 +532,12 @@ func TestHandleKeyCreate_Validation(t *testing.T) {
 			} else {
 				assert.Empty(t, st.SetCalls(), "expected Set NOT to be called")
 				// verify error message is in response (form re-rendered with error)
-				assert.Contains(t, rec.Body.String(), "invalid")
+				body := rec.Body.String()
+				assert.Contains(t, body, "invalid")
+				// verify save button is hidden and force button is shown
+				assert.Contains(t, body, `id="save-btn"`)
+				assert.Contains(t, body, `style="display:none"`)
+				assert.Contains(t, body, `id="force-btn"`)
 			}
 		})
 	}
@@ -584,7 +589,12 @@ func TestHandleKeyUpdate_Validation(t *testing.T) {
 				assert.Equal(t, "updatekey", st.SetCalls()[0].Key)
 			} else {
 				assert.Empty(t, st.SetCalls(), "expected Set NOT to be called")
-				assert.Contains(t, rec.Body.String(), "invalid")
+				body := rec.Body.String()
+				assert.Contains(t, body, "invalid")
+				// verify save button is hidden and force button is shown
+				assert.Contains(t, body, `id="save-btn"`)
+				assert.Contains(t, body, `style="display:none"`)
+				assert.Contains(t, body, `id="force-btn"`)
 			}
 		})
 	}
