@@ -257,7 +257,8 @@ tokens:
 	})
 
 	t.Run("login with wrong password fails", func(t *testing.T) {
-		resp, err := client.PostForm("http://127.0.0.1:18485/login", map[string][]string{"username": {"admin"}, "password": {"wrongpass"}})
+		loginURL := "http://127.0.0.1:18485/login"
+		resp, err := client.PostForm(loginURL, map[string][]string{"username": {"admin"}, "password": {"wrongpass"}})
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -270,7 +271,8 @@ tokens:
 				return http.ErrUseLastResponse
 			},
 		}
-		resp, err := noRedirectClient.PostForm("http://127.0.0.1:18485/login", map[string][]string{"username": {"admin"}, "password": {"testpass"}})
+		loginURL := "http://127.0.0.1:18485/login"
+		resp, err := noRedirectClient.PostForm(loginURL, map[string][]string{"username": {"admin"}, "password": {"testpass"}})
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
@@ -296,7 +298,8 @@ tokens:
 				return http.ErrUseLastResponse
 			},
 		}
-		resp, err := noRedirectClient.PostForm("http://127.0.0.1:18485/login", map[string][]string{"username": {"admin"}, "password": {"testpass"}})
+		loginURL := "http://127.0.0.1:18485/login"
+		resp, err := noRedirectClient.PostForm(loginURL, map[string][]string{"username": {"admin"}, "password": {"testpass"}})
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -329,7 +332,8 @@ tokens:
 		}
 
 		// login first
-		resp, err := noRedirectClient.PostForm("http://127.0.0.1:18485/login", map[string][]string{"username": {"admin"}, "password": {"testpass"}})
+		loginURL := "http://127.0.0.1:18485/login"
+		resp, err := noRedirectClient.PostForm(loginURL, map[string][]string{"username": {"admin"}, "password": {"testpass"}})
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusSeeOther, resp.StatusCode)
@@ -789,9 +793,10 @@ func TestRunRestore(t *testing.T) {
 	require.NoError(t, err)
 
 	// commit test keys
-	require.NoError(t, gitStore.Commit(git.CommitRequest{Key: "app/key1", Value: []byte("value1"), Operation: "set", Author: git.DefaultAuthor()}))
-	require.NoError(t, gitStore.Commit(git.CommitRequest{Key: "app/key2", Value: []byte("value2"), Operation: "set", Author: git.DefaultAuthor()}))
-	require.NoError(t, gitStore.Commit(git.CommitRequest{Key: "config/db", Value: []byte("postgres://localhost"), Operation: "set", Author: git.DefaultAuthor()}))
+	author := git.DefaultAuthor()
+	require.NoError(t, gitStore.Commit(git.CommitRequest{Key: "app/key1", Value: []byte("value1"), Operation: "set", Author: author}))
+	require.NoError(t, gitStore.Commit(git.CommitRequest{Key: "app/key2", Value: []byte("value2"), Operation: "set", Author: author}))
+	require.NoError(t, gitStore.Commit(git.CommitRequest{Key: "config/db", Value: []byte("postgres://localhost"), Operation: "set", Author: author}))
 
 	// get current HEAD commit hash
 	headRef, err := gitStore.Head()

@@ -303,16 +303,16 @@ func TestHandler_Paginate(t *testing.T) {
 		wantPrev  bool
 		wantNext  bool
 	}{
-		{name: "first page", keys: makeKeys(10), page: 1, pageSize: 3, wantLen: 3, wantPage: 1, wantTotal: 4, wantPrev: false, wantNext: true},
-		{name: "middle page", keys: makeKeys(10), page: 2, pageSize: 3, wantLen: 3, wantPage: 2, wantTotal: 4, wantPrev: true, wantNext: true},
-		{name: "last page partial", keys: makeKeys(10), page: 4, pageSize: 3, wantLen: 1, wantPage: 4, wantTotal: 4, wantPrev: true, wantNext: false},
-		{name: "page beyond total clamps", keys: makeKeys(10), page: 10, pageSize: 3, wantLen: 1, wantPage: 4, wantTotal: 4, wantPrev: true, wantNext: false},
-		{name: "page zero clamps to 1", keys: makeKeys(10), page: 0, pageSize: 3, wantLen: 3, wantPage: 1, wantTotal: 4, wantPrev: false, wantNext: true},
-		{name: "negative page clamps to 1", keys: makeKeys(10), page: -5, pageSize: 3, wantLen: 3, wantPage: 1, wantTotal: 4, wantPrev: false, wantNext: true},
+		{name: "first", keys: makeKeys(10), page: 1, pageSize: 3, wantLen: 3, wantPage: 1, wantTotal: 4, wantPrev: false, wantNext: true},
+		{name: "middle", keys: makeKeys(10), page: 2, pageSize: 3, wantLen: 3, wantPage: 2, wantTotal: 4, wantPrev: true, wantNext: true},
+		{name: "last partial", keys: makeKeys(10), page: 4, pageSize: 3, wantLen: 1, wantPage: 4, wantTotal: 4, wantPrev: true, wantNext: false},
+		{name: "beyond total", keys: makeKeys(10), page: 10, pageSize: 3, wantLen: 1, wantPage: 4, wantTotal: 4, wantPrev: true, wantNext: false},
+		{name: "page zero", keys: makeKeys(10), page: 0, pageSize: 3, wantLen: 3, wantPage: 1, wantTotal: 4, wantPrev: false, wantNext: true},
+		{name: "negative", keys: makeKeys(10), page: -5, pageSize: 3, wantLen: 3, wantPage: 1, wantTotal: 4, wantPrev: false, wantNext: true},
 		{name: "empty keys", keys: nil, page: 1, pageSize: 3, wantLen: 0, wantPage: 1, wantTotal: 1, wantPrev: false, wantNext: false},
-		{name: "exact page fit", keys: makeKeys(6), page: 2, pageSize: 3, wantLen: 3, wantPage: 2, wantTotal: 2, wantPrev: true, wantNext: false},
-		{name: "single page", keys: makeKeys(2), page: 1, pageSize: 3, wantLen: 2, wantPage: 1, wantTotal: 1, wantPrev: false, wantNext: false},
-		{name: "page size zero returns all", keys: makeKeys(5), page: 1, pageSize: 0, wantLen: 5, wantPage: 1, wantTotal: 1, wantPrev: false, wantNext: false},
+		{name: "exact fit", keys: makeKeys(6), page: 2, pageSize: 3, wantLen: 3, wantPage: 2, wantTotal: 2, wantPrev: true, wantNext: false},
+		{name: "single", keys: makeKeys(2), page: 1, pageSize: 3, wantLen: 2, wantPage: 1, wantTotal: 1, wantPrev: false, wantNext: false},
+		{name: "size zero", keys: makeKeys(5), page: 1, pageSize: 0, wantLen: 5, wantPage: 1, wantTotal: 1, wantPrev: false, wantNext: false},
 	}
 
 	for _, tc := range tests {
@@ -402,15 +402,15 @@ func TestHandler_CalculateModalDimensions(t *testing.T) {
 		wantHeightMin int
 		wantHeightMax int
 	}{
-		{name: "empty value", value: "", wantWidth: 600, wantHeight: 104},
-		{name: "short value", value: "hello", wantWidth: 600, wantHeight: 104},
-		{name: "medium line 60 chars", value: "123456789012345678901234567890123456789012345678901234567890", wantWidth: 600, wantHeight: 104},
-		{name: "long line hits max width", value: string(make([]byte, 200)), wantWidth: 1200, wantHeight: 104},
-		{name: "few lines uses min lines", value: "line1\nline2", wantWidth: 600, wantHeight: 104},
+		{name: "empty", value: "", wantWidth: 600, wantHeight: 104},
+		{name: "short", value: "hello", wantWidth: 600, wantHeight: 104},
+		{name: "60 chars", value: "123456789012345678901234567890123456789012345678901234567890", wantWidth: 600, wantHeight: 104},
+		{name: "max width", value: string(make([]byte, 200)), wantWidth: 1200, wantHeight: 104},
+		{name: "few lines", value: "line1\nline2", wantWidth: 600, wantHeight: 104},
 		{name: "10 lines", value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10", wantWidth: 600, wantHeight: 224},
-		{name: "many lines hits max height", value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20", wantWidth: 600, wantHeight: 384},
-		{name: "cyrillic uses rune count not bytes", value: "привет мир", wantWidth: 600, wantHeight: 104},
-		{name: "japanese uses rune count not bytes", value: "こんにちは世界", wantWidthMin: 600, wantWidthMax: 700, wantHeightMin: 104, wantHeightMax: 104},
+		{name: "max height", value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20", wantWidth: 600, wantHeight: 384},
+		{name: "cyrillic runes", value: "привет мир", wantWidth: 600, wantHeight: 104},
+		{name: "japanese runes", value: "こんにちは世界", wantWidthMin: 600, wantWidthMax: 700, wantHeightMin: 104, wantHeightMax: 104},
 	}
 
 	for _, tc := range tests {

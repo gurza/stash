@@ -63,8 +63,9 @@ func TestStore_Commit(t *testing.T) {
 		store, err := New(Config{Path: filepath.Join(tmpDir, ".history")})
 		require.NoError(t, err)
 
-		err = store.Commit(CommitRequest{Key: "app/config/db", Value: []byte("postgres://localhost/db"), Operation: "set", Author: DefaultAuthor()})
-		require.NoError(t, err)
+		req := CommitRequest{Key: "app/config/db", Value: []byte("postgres://localhost/db"),
+			Operation: "set", Author: DefaultAuthor()}
+		require.NoError(t, store.Commit(req))
 
 		// verify file exists
 		valFile := filepath.Join(store.cfg.Path, "app", "config", "db.val")
@@ -78,8 +79,9 @@ func TestStore_Commit(t *testing.T) {
 		store, err := New(Config{Path: filepath.Join(tmpDir, ".history")})
 		require.NoError(t, err)
 
-		err = store.Commit(CommitRequest{Key: "deep/nested/path/key", Value: []byte("value"), Operation: "set", Author: DefaultAuthor()})
-		require.NoError(t, err)
+		req := CommitRequest{Key: "deep/nested/path/key", Value: []byte("value"),
+			Operation: "set", Author: DefaultAuthor()}
+		require.NoError(t, store.Commit(req))
 
 		valFile := filepath.Join(store.cfg.Path, "deep", "nested", "path", "key.val")
 		content, err := os.ReadFile(valFile) //nolint:gosec // test code
@@ -140,9 +142,10 @@ func TestStore_ReadAll(t *testing.T) {
 		require.NoError(t, err)
 
 		// create multiple keys
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: DefaultAuthor()}))
-		require.NoError(t, store.Commit(CommitRequest{Key: "app/config/db", Value: []byte("postgres://"), Operation: "set", Author: DefaultAuthor()}))
-		require.NoError(t, store.Commit(CommitRequest{Key: "app/config/redis", Value: []byte("redis://"), Operation: "set", Author: DefaultAuthor()}))
+		author := DefaultAuthor()
+		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: author}))
+		require.NoError(t, store.Commit(CommitRequest{Key: "app/config/db", Value: []byte("postgres://"), Operation: "set", Author: author}))
+		require.NoError(t, store.Commit(CommitRequest{Key: "app/config/redis", Value: []byte("redis://"), Operation: "set", Author: author}))
 
 		// read all
 		result, err := store.ReadAll()
@@ -544,14 +547,15 @@ func TestStore_BranchUsage(t *testing.T) {
 		repoPath := filepath.Join(tmpDir, ".history")
 
 		// create repo on master first
+		author := DefaultAuthor()
 		store1, err := New(Config{Path: repoPath, Branch: "master"})
 		require.NoError(t, err)
-		require.NoError(t, store1.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store1.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: author}))
 
 		// reopen with different branch
 		store2, err := New(Config{Path: repoPath, Branch: "develop"})
 		require.NoError(t, err)
-		require.NoError(t, store2.Commit(CommitRequest{Key: "key2", Value: []byte("value2"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store2.Commit(CommitRequest{Key: "key2", Value: []byte("value2"), Operation: "set", Author: author}))
 
 		// verify HEAD is on develop
 		head, err := store2.repo.Head()

@@ -37,15 +37,15 @@ var opts struct {
 		ReadTimeout     time.Duration `long:"read-timeout" env:"READ_TIMEOUT" default:"5s" description:"read timeout"`
 		WriteTimeout    time.Duration `long:"write-timeout" env:"WRITE_TIMEOUT" default:"30s" description:"write timeout"`
 		IdleTimeout     time.Duration `long:"idle-timeout" env:"IDLE_TIMEOUT" default:"30s" description:"idle timeout"`
-		ShutdownTimeout time.Duration `long:"shutdown-timeout" env:"SHUTDOWN_TIMEOUT" default:"5s" description:"graceful shutdown timeout"`
+		ShutdownTimeout time.Duration `long:"shutdown-timeout" env:"SHUTDOWN_TIMEOUT" default:"5s" description:"shutdown timeout"`
 		BaseURL         string        `long:"base-url" env:"BASE_URL" description:"base URL path for reverse proxy (e.g., /stash)"`
-		PageSize        int           `long:"page-size" env:"PAGE_SIZE" default:"50" description:"keys per page in web UI, 0 to disable"`
+		PageSize        int           `long:"page-size" env:"PAGE_SIZE" default:"50" description:"keys per page, 0 to disable"`
 	} `group:"server" namespace:"server" env-namespace:"STASH_SERVER"`
 
 	Limits struct {
 		BodySize         int64 `long:"body-size" env:"BODY_SIZE" default:"1048576" description:"max body size in bytes"`
 		RequestsPerSec   int64 `long:"requests-per-sec" env:"REQUESTS_PER_SEC" default:"1000" description:"max requests per second"`
-		LoginConcurrency int64 `long:"login-concurrency" env:"LOGIN_CONCURRENCY" default:"5" description:"max concurrent login attempts"`
+		LoginConcurrency int64 `long:"login-concurrency" env:"LOGIN_CONCURRENCY" default:"5" description:"max concurrent logins"`
 	} `group:"limits" namespace:"limits" env-namespace:"STASH_LIMITS"`
 
 	Cache struct {

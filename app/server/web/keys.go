@@ -554,7 +554,8 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 	if !force && !isBinary {
 		if validationErr := h.validator.Validate(format, value); validationErr != nil {
 			h.renderValidationError(w, validationErrorParams{
-				Key: key, Value: valueStr, Format: format, IsBinary: isBinary, Username: username, Error: validationErr.Error(), UpdatedAt: formUpdatedAt,
+				Key: key, Value: valueStr, Format: format, IsBinary: isBinary,
+				Username: username, Error: validationErr.Error(), UpdatedAt: formUpdatedAt,
 			})
 			return
 		}

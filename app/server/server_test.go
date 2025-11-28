@@ -343,7 +343,8 @@ func TestServer_Handler_BaseURL(t *testing.T) {
 	}
 
 	t.Run("without base URL routes work at root", func(t *testing.T) {
-		srv, err := New(st, validator.NewService(), nil, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: ""})
+		cfg := Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: ""}
+		srv, err := New(st, validator.NewService(), nil, cfg)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/kv/testkey", http.NoBody)
@@ -355,7 +356,8 @@ func TestServer_Handler_BaseURL(t *testing.T) {
 	})
 
 	t.Run("with base URL routes work under prefix", func(t *testing.T) {
-		srv, err := New(st, validator.NewService(), nil, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"})
+		cfg := Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"}
+		srv, err := New(st, validator.NewService(), nil, cfg)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/stash/kv/testkey", http.NoBody)
@@ -367,7 +369,8 @@ func TestServer_Handler_BaseURL(t *testing.T) {
 	})
 
 	t.Run("base URL redirects to trailing slash", func(t *testing.T) {
-		srv, err := New(st, validator.NewService(), nil, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"})
+		cfg := Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"}
+		srv, err := New(st, validator.NewService(), nil, cfg)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/stash", http.NoBody)
@@ -379,7 +382,8 @@ func TestServer_Handler_BaseURL(t *testing.T) {
 	})
 
 	t.Run("with base URL root path still accessible via prefix", func(t *testing.T) {
-		srv, err := New(st, validator.NewService(), nil, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"})
+		cfg := Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/stash"}
+		srv, err := New(st, validator.NewService(), nil, cfg)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/stash/ping", http.NoBody)
@@ -391,7 +395,8 @@ func TestServer_Handler_BaseURL(t *testing.T) {
 	})
 
 	t.Run("with base URL set correctly passes to KV API", func(t *testing.T) {
-		srv, err := New(st, validator.NewService(), nil, Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/app/stash"})
+		cfg := Config{Address: ":8080", ReadTimeout: 5 * time.Second, Version: "test", BaseURL: "/app/stash"}
+		srv, err := New(st, validator.NewService(), nil, cfg)
 		require.NoError(t, err)
 
 		body := bytes.NewBufferString("newvalue")
