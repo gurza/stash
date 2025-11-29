@@ -414,7 +414,7 @@ func (s *Store) adoptQuery(query string) string {
 	// placeholder conversion
 	result := make([]byte, 0, len(query)+10)
 	paramNum := 1
-	for i := 0; i < len(query); i++ {
+	for i := range len(query) {
 		if query[i] != '?' {
 			result = append(result, query[i])
 			continue

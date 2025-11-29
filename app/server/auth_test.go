@@ -1272,13 +1272,13 @@ tokens:
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_ = auth.Reload()
 		}
 	}()
 
 	// concurrent reads while reloading
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		_ = auth.Enabled()
 		_ = auth.HasTokenACL("apitoken")
 		_ = auth.CheckUserPermission("admin", "test", false)
