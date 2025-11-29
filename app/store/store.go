@@ -10,6 +10,32 @@ import (
 // ErrNotFound is returned when a key is not found in the store.
 var ErrNotFound = errors.New("key not found")
 
+// ErrConflict is returned when optimistic locking fails due to concurrent modification.
+var ErrConflict = errors.New("version conflict")
+
+// ConflictInfo holds details about a detected version conflict.
+type ConflictInfo struct {
+	CurrentValue     []byte
+	CurrentFormat    string
+	CurrentVersion   time.Time
+	AttemptedVersion time.Time
+}
+
+// ConflictError wraps ErrConflict with conflict details for UI display.
+type ConflictError struct {
+	Info ConflictInfo
+}
+
+// Error returns a string representation of the conflict.
+func (e *ConflictError) Error() string {
+	return "version conflict: key was modified since " + e.Info.AttemptedVersion.Format(time.RFC3339)
+}
+
+// Unwrap returns the underlying ErrConflict sentinel.
+func (e *ConflictError) Unwrap() error {
+	return ErrConflict
+}
+
 // Interface defines the contract for key-value storage operations.
 // Both Store (concrete DB) and Cached (wrapper) implement this interface.
 type Interface interface {
@@ -17,6 +43,7 @@ type Interface interface {
 	GetWithFormat(key string) ([]byte, string, error)
 	GetInfo(key string) (KeyInfo, error)
 	Set(key string, value []byte, format string) error
+	SetWithVersion(key string, value []byte, format string, expectedVersion time.Time) error
 	Delete(key string) error
 	List() ([]KeyInfo, error)
 	Close() error

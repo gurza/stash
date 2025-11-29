@@ -328,8 +328,8 @@ func TestHandler_HandleKeyCreate_Errors(t *testing.T) {
 func TestHandler_HandleKeyUpdate(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		st := &mocks.KVStoreMock{
-			SetFunc:  func(key string, value []byte, format string) error { return nil },
-			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
+			SetWithVersionFunc: func(key string, value []byte, format string, expectedVersion time.Time) error { return nil },
+			ListFunc:           func() ([]store.KeyInfo, error) { return nil, nil },
 		}
 		auth := &mocks.AuthProviderMock{
 			CheckUserPermissionFunc: func(username, key string, write bool) bool { return true },
@@ -346,9 +346,9 @@ func TestHandler_HandleKeyUpdate(t *testing.T) {
 		h.handleKeyUpdate(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		require.Len(t, st.SetCalls(), 1)
-		assert.Equal(t, "updatekey", st.SetCalls()[0].Key)
-		assert.Equal(t, "updated", string(st.SetCalls()[0].Value))
+		require.Len(t, st.SetWithVersionCalls(), 1)
+		assert.Equal(t, "updatekey", st.SetWithVersionCalls()[0].Key)
+		assert.Equal(t, "updated", string(st.SetWithVersionCalls()[0].Value))
 	})
 
 	t.Run("permission denied", func(t *testing.T) {
@@ -374,7 +374,9 @@ func TestHandler_HandleKeyUpdate(t *testing.T) {
 
 	t.Run("store error", func(t *testing.T) {
 		st := &mocks.KVStoreMock{
-			SetFunc:  func(key string, value []byte, format string) error { return errors.New("db error") },
+			SetWithVersionFunc: func(key string, value []byte, format string, expectedVersion time.Time) error {
+				return errors.New("db error")
+			},
 			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
 		}
 		auth := &mocks.AuthProviderMock{
@@ -497,102 +499,22 @@ func TestHandler_HandleKeyDelete(t *testing.T) {
 	})
 }
 
-func TestHandler_CheckConflict(t *testing.T) {
-	now := time.Now()
-
-	t.Run("no timestamp skips check", func(t *testing.T) {
-		st := &mocks.KVStoreMock{}
-		h := newTestHandlerWithStore(t, st)
-
-		conflict, err := h.checkConflict("test-key", 0)
-		require.NoError(t, err)
-		assert.Nil(t, conflict)
-		assert.Empty(t, st.GetInfoCalls(), "GetInfo should not be called")
-	})
-
-	t.Run("negative timestamp skips check", func(t *testing.T) {
-		st := &mocks.KVStoreMock{}
-		h := newTestHandlerWithStore(t, st)
-
-		conflict, err := h.checkConflict("test-key", -1)
-		require.NoError(t, err)
-		assert.Nil(t, conflict)
-	})
-
-	t.Run("key not found returns no conflict", func(t *testing.T) {
-		st := &mocks.KVStoreMock{
-			GetInfoFunc: func(key string) (store.KeyInfo, error) {
-				return store.KeyInfo{}, store.ErrNotFound
-			},
-		}
-		h := newTestHandlerWithStore(t, st)
-
-		conflict, err := h.checkConflict("test-key", now.Unix())
-		require.NoError(t, err)
-		assert.Nil(t, conflict)
-	})
-
-	t.Run("db error returns error", func(t *testing.T) {
-		dbErr := errors.New("database connection failed")
-		st := &mocks.KVStoreMock{
-			GetInfoFunc: func(key string) (store.KeyInfo, error) {
-				return store.KeyInfo{}, dbErr
-			},
-		}
-		h := newTestHandlerWithStore(t, st)
-
-		conflict, err := h.checkConflict("test-key", now.Unix())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unable to verify")
-		assert.Nil(t, conflict)
-	})
-
-	t.Run("timestamps match returns no conflict", func(t *testing.T) {
-		st := &mocks.KVStoreMock{
-			GetInfoFunc: func(key string) (store.KeyInfo, error) {
-				return store.KeyInfo{Key: key, UpdatedAt: now}, nil
-			},
-		}
-		h := newTestHandlerWithStore(t, st)
-
-		conflict, err := h.checkConflict("test-key", now.Unix())
-		require.NoError(t, err)
-		assert.Nil(t, conflict)
-	})
-
-	t.Run("timestamps differ returns conflict", func(t *testing.T) {
-		serverTime := now.Add(time.Minute)
-		st := &mocks.KVStoreMock{
-			GetInfoFunc: func(key string) (store.KeyInfo, error) {
-				return store.KeyInfo{Key: key, UpdatedAt: serverTime}, nil
-			},
-			GetWithFormatFunc: func(key string) ([]byte, string, error) {
-				return []byte("server value"), "text", nil
-			},
-		}
-		h := newTestHandlerWithStore(t, st)
-
-		conflict, err := h.checkConflict("test-key", now.Unix())
-		require.NoError(t, err)
-		require.NotNil(t, conflict)
-		assert.Equal(t, "server value", conflict.ServerValue)
-		assert.Equal(t, "text", conflict.ServerFormat)
-		assert.Equal(t, serverTime.Unix(), conflict.ServerUpdatedAt)
-	})
-}
-
 func TestHandler_HandleKeyUpdate_ConflictDetection(t *testing.T) {
 	originalTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	modifiedTime := time.Date(2024, 1, 1, 12, 5, 0, 0, time.UTC) // 5 minutes later
 
-	t.Run("conflict detected when timestamp differs", func(t *testing.T) {
+	t.Run("conflict detected when version mismatch", func(t *testing.T) {
 		st := &mocks.KVStoreMock{
-			SetFunc: func(key string, value []byte, format string) error { return nil },
-			GetInfoFunc: func(key string) (store.KeyInfo, error) {
-				return store.KeyInfo{Key: key, UpdatedAt: modifiedTime}, nil // server has newer timestamp
-			},
-			GetWithFormatFunc: func(key string) ([]byte, string, error) {
-				return []byte("server value"), "text", nil
+			SetWithVersionFunc: func(key string, value []byte, format string, expectedVersion time.Time) error {
+				// return ConflictError with server's current state
+				return &store.ConflictError{
+					Info: store.ConflictInfo{
+						CurrentValue:     []byte("server value"),
+						CurrentFormat:    "text",
+						CurrentVersion:   modifiedTime,
+						AttemptedVersion: expectedVersion,
+					},
+				}
 			},
 			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
 		}
@@ -613,17 +535,16 @@ func TestHandler_HandleKeyUpdate_ConflictDetection(t *testing.T) {
 		h.handleKeyUpdate(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Empty(t, st.SetCalls(), "expected Set NOT to be called on conflict")
-		body2 := rec.Body.String()
-		assert.Contains(t, body2, "Conflict detected")
-		assert.Contains(t, body2, "server value")
+		require.Len(t, st.SetWithVersionCalls(), 1, "expected SetWithVersion to be called")
+		body := rec.Body.String()
+		assert.Contains(t, body, "Conflict detected")
+		assert.Contains(t, body, "server value")
 	})
 
 	t.Run("force_overwrite bypasses conflict check", func(t *testing.T) {
 		st := &mocks.KVStoreMock{
-			SetFunc: func(key string, value []byte, format string) error { return nil },
-			GetInfoFunc: func(key string) (store.KeyInfo, error) {
-				return store.KeyInfo{Key: key, UpdatedAt: modifiedTime}, nil
+			SetWithVersionFunc: func(key string, value []byte, format string, expectedVersion time.Time) error {
+				return nil // success
 			},
 			ListFunc: func() ([]store.KeyInfo, error) { return nil, nil },
 		}
@@ -647,7 +568,9 @@ func TestHandler_HandleKeyUpdate_ConflictDetection(t *testing.T) {
 		h.handleKeyUpdate(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		require.Len(t, st.SetCalls(), 1, "expected Set to be called when force_overwrite=true")
+		require.Len(t, st.SetWithVersionCalls(), 1, "expected SetWithVersion to be called")
+		// verify zero time was passed (no version check)
+		assert.True(t, st.SetWithVersionCalls()[0].ExpectedVersion.IsZero(), "expected zero time for force_overwrite")
 	})
 }
 

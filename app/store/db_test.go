@@ -499,3 +499,127 @@ func TestMigration_SQLite_AlreadyMigrated(t *testing.T) {
 	assert.Equal(t, []byte("test-value"), value)
 	assert.Equal(t, "yaml", format)
 }
+
+func TestStore_SetWithVersion(t *testing.T) {
+	store := newTestStore(t)
+	defer store.Close()
+
+	t.Run("success when version matches", func(t *testing.T) {
+		err := store.Set("versioned", []byte("initial"), "text")
+		require.NoError(t, err)
+
+		info, err := store.GetInfo("versioned")
+		require.NoError(t, err)
+
+		// update with matching version
+		err = store.SetWithVersion("versioned", []byte("updated"), "json", info.UpdatedAt)
+		require.NoError(t, err)
+
+		// verify update succeeded
+		value, format, err := store.GetWithFormat("versioned")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("updated"), value)
+		assert.Equal(t, "json", format)
+	})
+
+	t.Run("conflict when version mismatch", func(t *testing.T) {
+		err := store.Set("conflict-key", []byte("original"), "text")
+		require.NoError(t, err)
+
+		// get initial version
+		info1, err := store.GetInfo("conflict-key")
+		require.NoError(t, err)
+
+		// simulate concurrent update
+		time.Sleep(1100 * time.Millisecond) // ensure timestamp changes
+		err = store.Set("conflict-key", []byte("concurrent-update"), "yaml")
+		require.NoError(t, err)
+
+		// try to update with old version
+		err = store.SetWithVersion("conflict-key", []byte("my-update"), "json", info1.UpdatedAt)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrConflict)
+
+		// verify ConflictError has correct details
+		var conflictErr *ConflictError
+		require.ErrorAs(t, err, &conflictErr)
+		assert.Equal(t, []byte("concurrent-update"), conflictErr.Info.CurrentValue)
+		assert.Equal(t, "yaml", conflictErr.Info.CurrentFormat)
+		assert.True(t, conflictErr.Info.CurrentVersion.After(info1.UpdatedAt))
+		assert.Equal(t, info1.UpdatedAt, conflictErr.Info.AttemptedVersion)
+	})
+
+	t.Run("not found when key deleted", func(t *testing.T) {
+		err := store.Set("to-delete", []byte("value"), "text")
+		require.NoError(t, err)
+
+		info, err := store.GetInfo("to-delete")
+		require.NoError(t, err)
+
+		// delete the key
+		err = store.Delete("to-delete")
+		require.NoError(t, err)
+
+		// try to update deleted key
+		err = store.SetWithVersion("to-delete", []byte("update"), "text", info.UpdatedAt)
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("zero time behaves like regular set", func(t *testing.T) {
+		// create new key with zero time
+		err := store.SetWithVersion("zero-time", []byte("value1"), "text", time.Time{})
+		require.NoError(t, err)
+
+		value, err := store.Get("zero-time")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("value1"), value)
+
+		// update with zero time (no version check)
+		err = store.SetWithVersion("zero-time", []byte("value2"), "json", time.Time{})
+		require.NoError(t, err)
+
+		value, format, err := store.GetWithFormat("zero-time")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("value2"), value)
+		assert.Equal(t, "json", format)
+	})
+
+	t.Run("empty format defaults to text", func(t *testing.T) {
+		err := store.Set("empty-fmt", []byte("val"), "text")
+		require.NoError(t, err)
+
+		info, err := store.GetInfo("empty-fmt")
+		require.NoError(t, err)
+
+		err = store.SetWithVersion("empty-fmt", []byte("updated"), "", info.UpdatedAt)
+		require.NoError(t, err)
+
+		_, format, err := store.GetWithFormat("empty-fmt")
+		require.NoError(t, err)
+		assert.Equal(t, "text", format)
+	})
+
+	t.Run("works with unix nano timestamp round-trip", func(t *testing.T) {
+		// this test verifies that nanosecond-precision timestamps survive round-trip
+		// through UnixNano() -> time.Unix(0, nanos) conversion (used by web UI)
+		err := store.Set("unix-roundtrip", []byte("initial"), "text")
+		require.NoError(t, err)
+
+		info, err := store.GetInfo("unix-roundtrip")
+		require.NoError(t, err)
+
+		// simulate form round-trip: convert to unix nanos and back (preserves precision)
+		unixNanos := info.UpdatedAt.UnixNano()
+		reconstructed := time.Unix(0, unixNanos).UTC()
+
+		// update with reconstructed timestamp should succeed
+		err = store.SetWithVersion("unix-roundtrip", []byte("updated"), "json", reconstructed)
+		require.NoError(t, err, "update with unix-nano-reconstructed timestamp should succeed")
+
+		// verify update worked
+		value, format, err := store.GetWithFormat("unix-roundtrip")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("updated"), value)
+		assert.Equal(t, "json", format)
+	})
+}

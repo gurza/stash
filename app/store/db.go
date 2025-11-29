@@ -306,6 +306,76 @@ func (s *Store) Set(key string, value []byte, format string) error {
 	return nil
 }
 
+// SetWithVersion stores the value only if the key's updated_at matches expectedVersion.
+// Returns *ConflictError with current state if the key was modified since expectedVersion.
+// If expectedVersion is zero, behaves like regular Set (no version check).
+func (s *Store) SetWithVersion(key string, value []byte, format string, expectedVersion time.Time) error {
+	if expectedVersion.IsZero() {
+		return s.Set(key, value, format)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if format == "" {
+		format = "text"
+	}
+	now := time.Now().UTC()
+
+	// atomic update: only succeeds if version matches
+	var query string
+	switch s.dbType {
+	case DBTypePostgres:
+		query = `UPDATE kv SET value = $1, format = $2, updated_at = $3 WHERE key = $4 AND updated_at = $5`
+	default:
+		query = `UPDATE kv SET value = ?, format = ?, updated_at = ? WHERE key = ? AND updated_at = ?`
+	}
+
+	result, err := s.db.Exec(query, value, format, now, key, expectedVersion)
+	if err != nil {
+		return fmt.Errorf("failed to update key %q: %w", key, err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check affected rows: %w", err)
+	}
+
+	if rows == 0 {
+		// either key doesn't exist or version mismatch - fetch current state
+		return s.buildConflictError(key, expectedVersion)
+	}
+
+	return nil
+}
+
+// buildConflictError fetches current state and builds a ConflictError.
+// must be called with lock held.
+func (s *Store) buildConflictError(key string, attemptedVersion time.Time) error {
+	var result struct {
+		Value     []byte    `db:"value"`
+		Format    string    `db:"format"`
+		UpdatedAt time.Time `db:"updated_at"`
+	}
+	query := s.adoptQuery("SELECT value, format, updated_at FROM kv WHERE key = ?")
+	err := s.db.Get(&result, query, key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound // key was deleted
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get current state for conflict: %w", err)
+	}
+
+	return &ConflictError{
+		Info: ConflictInfo{
+			CurrentValue:     result.Value,
+			CurrentFormat:    result.Format,
+			CurrentVersion:   result.UpdatedAt,
+			AttemptedVersion: attemptedVersion,
+		},
+	}
+}
+
 // Delete removes the key from the store.
 // Returns ErrNotFound if the key does not exist.
 func (s *Store) Delete(key string) error {

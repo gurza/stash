@@ -5,6 +5,7 @@ package mocks
 
 import (
 	"sync"
+	"time"
 
 	"github.com/umputun/stash/app/store"
 )
@@ -33,6 +34,9 @@ import (
 //			SetFunc: func(key string, value []byte, format string) error {
 //				panic("mock out the Set method")
 //			},
+//			SetWithVersionFunc: func(key string, value []byte, format string, expectedVersion time.Time) error {
+//				panic("mock out the SetWithVersion method")
+//			},
 //		}
 //
 //		// use mockedKVStore in code that requires server.KVStore
@@ -57,6 +61,9 @@ type KVStoreMock struct {
 
 	// SetFunc mocks the Set method.
 	SetFunc func(key string, value []byte, format string) error
+
+	// SetWithVersionFunc mocks the SetWithVersion method.
+	SetWithVersionFunc func(key string, value []byte, format string, expectedVersion time.Time) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -92,13 +99,25 @@ type KVStoreMock struct {
 			// Format is the format argument value.
 			Format string
 		}
+		// SetWithVersion holds details about calls to the SetWithVersion method.
+		SetWithVersion []struct {
+			// Key is the key argument value.
+			Key string
+			// Value is the value argument value.
+			Value []byte
+			// Format is the format argument value.
+			Format string
+			// ExpectedVersion is the expectedVersion argument value.
+			ExpectedVersion time.Time
+		}
 	}
-	lockDelete        sync.RWMutex
-	lockGet           sync.RWMutex
-	lockGetInfo       sync.RWMutex
-	lockGetWithFormat sync.RWMutex
-	lockList          sync.RWMutex
-	lockSet           sync.RWMutex
+	lockDelete         sync.RWMutex
+	lockGet            sync.RWMutex
+	lockGetInfo        sync.RWMutex
+	lockGetWithFormat  sync.RWMutex
+	lockList           sync.RWMutex
+	lockSet            sync.RWMutex
+	lockSetWithVersion sync.RWMutex
 }
 
 // Delete calls DeleteFunc.
@@ -293,5 +312,49 @@ func (mock *KVStoreMock) SetCalls() []struct {
 	mock.lockSet.RLock()
 	calls = mock.calls.Set
 	mock.lockSet.RUnlock()
+	return calls
+}
+
+// SetWithVersion calls SetWithVersionFunc.
+func (mock *KVStoreMock) SetWithVersion(key string, value []byte, format string, expectedVersion time.Time) error {
+	if mock.SetWithVersionFunc == nil {
+		panic("KVStoreMock.SetWithVersionFunc: method is nil but KVStore.SetWithVersion was just called")
+	}
+	callInfo := struct {
+		Key             string
+		Value           []byte
+		Format          string
+		ExpectedVersion time.Time
+	}{
+		Key:             key,
+		Value:           value,
+		Format:          format,
+		ExpectedVersion: expectedVersion,
+	}
+	mock.lockSetWithVersion.Lock()
+	mock.calls.SetWithVersion = append(mock.calls.SetWithVersion, callInfo)
+	mock.lockSetWithVersion.Unlock()
+	return mock.SetWithVersionFunc(key, value, format, expectedVersion)
+}
+
+// SetWithVersionCalls gets all the calls that were made to SetWithVersion.
+// Check the length with:
+//
+//	len(mockedKVStore.SetWithVersionCalls())
+func (mock *KVStoreMock) SetWithVersionCalls() []struct {
+	Key             string
+	Value           []byte
+	Format          string
+	ExpectedVersion time.Time
+} {
+	var calls []struct {
+		Key             string
+		Value           []byte
+		Format          string
+		ExpectedVersion time.Time
+	}
+	mock.lockSetWithVersion.RLock()
+	calls = mock.calls.SetWithVersion
+	mock.lockSetWithVersion.RUnlock()
 	return calls
 }

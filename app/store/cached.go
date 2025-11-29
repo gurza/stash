@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/go-pkgz/lcw/v2"
 )
@@ -63,6 +64,16 @@ func (c *Cached) GetWithFormat(key string) ([]byte, string, error) {
 func (c *Cached) Set(key string, value []byte, format string) error {
 	if err := c.store.Set(key, value, format); err != nil {
 		return fmt.Errorf("store set: %w", err)
+	}
+	c.cache.Invalidate(func(k string) bool { return k == key })
+	return nil
+}
+
+// SetWithVersion stores a value with version check and invalidates the cache entry on success.
+func (c *Cached) SetWithVersion(key string, value []byte, format string, expectedVersion time.Time) error {
+	if err := c.store.SetWithVersion(key, value, format, expectedVersion); err != nil {
+		// don't wrap - let caller check error type directly (ErrConflict, ConflictError, etc.)
+		return err //nolint:wrapcheck // intentionally pass through for error type checks
 	}
 	c.cache.Invalidate(func(k string) bool { return k == key })
 	return nil

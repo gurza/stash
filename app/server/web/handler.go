@@ -51,6 +51,7 @@ type KVStore interface {
 	GetWithFormat(key string) ([]byte, string, error)
 	GetInfo(key string) (store.KeyInfo, error)
 	Set(key string, value []byte, format string) error
+	SetWithVersion(key string, value []byte, format string, expectedVersion time.Time) error
 	Delete(key string) error
 	List() ([]store.KeyInfo, error)
 }

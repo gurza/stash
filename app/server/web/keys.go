@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	log "github.com/go-pkgz/lgr"
@@ -14,50 +15,6 @@ import (
 	"github.com/umputun/stash/app/git"
 	"github.com/umputun/stash/app/store"
 )
-
-// conflictInfo holds data about a detected conflict.
-type conflictInfo struct {
-	ServerValue     string
-	ServerFormat    string
-	ServerUpdatedAt int64
-}
-
-// checkConflict checks if the key was modified since the form was loaded.
-// Returns (nil, nil) if no conflict, (conflictInfo, nil) if conflict detected,
-// or (nil, error) if unable to verify due to store error.
-func (h *Handler) checkConflict(key string, formUpdatedAt int64) (*conflictInfo, error) {
-	if formUpdatedAt <= 0 {
-		return nil, nil // no timestamp to compare, skip conflict check
-	}
-
-	info, err := h.store.GetInfo(key)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, nil // new key, no conflict possible
-		}
-		return nil, fmt.Errorf("unable to verify: %w", err) // real DB error
-	}
-
-	serverUpdatedAt := info.UpdatedAt.Unix()
-	if serverUpdatedAt == formUpdatedAt {
-		return nil, nil // no conflict
-	}
-
-	// conflict detected - get current server value
-	serverValue, serverFormat, err := h.store.GetWithFormat(key)
-	if err != nil {
-		log.Printf("[WARN] failed to get server value for conflict display: %v", err)
-		serverValue = []byte("(unable to retrieve)")
-		serverFormat = "text"
-	}
-	serverDisplayValue, _ := h.valueForDisplay(serverValue)
-
-	return &conflictInfo{
-		ServerValue:     serverDisplayValue,
-		ServerFormat:    serverFormat,
-		ServerUpdatedAt: serverUpdatedAt,
-	}, nil
-}
 
 // validationErrorParams holds parameters for rendering a validation error form.
 type validationErrorParams struct {
@@ -316,10 +273,10 @@ func (h *Handler) handleKeyEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get key info for conflict detection (updated_at timestamp)
+	// get key info for conflict detection (updated_at timestamp as nanoseconds)
 	var updatedAt int64
 	if info, infoErr := h.store.GetInfo(key); infoErr == nil {
-		updatedAt = info.UpdatedAt.Unix()
+		updatedAt = info.UpdatedAt.UnixNano()
 	}
 
 	displayValue, isBinary := h.valueForDisplay(value)
@@ -509,17 +466,31 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check for conflicts (optimistic locking) unless force_overwrite is set
-	forceOverwrite := r.FormValue("force_overwrite") == "true"
+	// validate value unless force flag is set or value is binary
+	force := r.FormValue("force") == "true"
 	formUpdatedAt, _ := strconv.ParseInt(r.FormValue("updated_at"), 10, 64)
-	if !forceOverwrite {
-		conflict, checkErr := h.checkConflict(key, formUpdatedAt)
-		if checkErr != nil {
-			log.Printf("[ERROR] conflict check failed for key %q: %v", key, checkErr)
-			http.Error(w, "unable to verify, please retry", http.StatusInternalServerError)
+	if !force && !isBinary {
+		if validationErr := h.validator.Validate(format, value); validationErr != nil {
+			h.renderValidationError(w, validationErrorParams{
+				Key: key, Value: valueStr, Format: format, IsBinary: isBinary,
+				Username: username, Error: validationErr.Error(), UpdatedAt: formUpdatedAt,
+			})
 			return
 		}
-		if conflict != nil {
+	}
+
+	// use atomic SetWithVersion for optimistic locking unless force_overwrite is set
+	forceOverwrite := r.FormValue("force_overwrite") == "true"
+	var expectedVersion time.Time
+	if !forceOverwrite && formUpdatedAt > 0 {
+		expectedVersion = time.Unix(0, formUpdatedAt).UTC()
+	}
+
+	if err := h.store.SetWithVersion(key, value, format, expectedVersion); err != nil {
+		var conflictErr *store.ConflictError
+		if errors.As(err, &conflictErr) {
+			// conflict detected - render form with server's current value
+			serverDisplayValue, _ := h.valueForDisplay(conflictErr.Info.CurrentValue)
 			w.Header().Set("HX-Retarget", "#modal-content")
 			w.Header().Set("HX-Reswap", "innerHTML")
 			modalWidth, textareaHeight := h.calculateModalDimensions(valueStr)
@@ -536,32 +507,18 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 				CanWrite:        true,
 				Username:        username,
 				Conflict:        true,
-				ServerValue:     conflict.ServerValue,
-				ServerFormat:    conflict.ServerFormat,
-				ServerUpdatedAt: conflict.ServerUpdatedAt,
+				ServerValue:     serverDisplayValue,
+				ServerFormat:    conflictErr.Info.CurrentFormat,
+				ServerUpdatedAt: conflictErr.Info.CurrentVersion.UnixNano(),
 				UpdatedAt:       formUpdatedAt,
 			}
-			if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
-				log.Printf("[ERROR] failed to execute template: %v", err)
+			if tmplErr := h.tmpl.ExecuteTemplate(w, "form", data); tmplErr != nil {
+				log.Printf("[ERROR] failed to execute template: %v", tmplErr)
 			}
-			log.Printf("[WARN] conflict detected for key %q: form=%d, server=%d", key, formUpdatedAt, conflict.ServerUpdatedAt)
+			log.Printf("[WARN] conflict detected for key %q: form=%d, server=%d",
+				key, formUpdatedAt, conflictErr.Info.CurrentVersion.UnixNano())
 			return
 		}
-	}
-
-	// validate value unless force flag is set or value is binary
-	force := r.FormValue("force") == "true"
-	if !force && !isBinary {
-		if validationErr := h.validator.Validate(format, value); validationErr != nil {
-			h.renderValidationError(w, validationErrorParams{
-				Key: key, Value: valueStr, Format: format, IsBinary: isBinary,
-				Username: username, Error: validationErr.Error(), UpdatedAt: formUpdatedAt,
-			})
-			return
-		}
-	}
-
-	if err := h.store.Set(key, value, format); err != nil {
 		log.Printf("[ERROR] failed to set key: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
