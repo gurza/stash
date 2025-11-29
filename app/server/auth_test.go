@@ -614,6 +614,15 @@ users:
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// HTMX request without session should return 401 with HX-Redirect header
+	req = httptest.NewRequest("GET", "/web/keys", http.NoBody)
+	req.Header.Set("HX-Request", "true")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Equal(t, "/login", rec.Header().Get("HX-Redirect"))
+	assert.Empty(t, rec.Header().Get("Location"), "should not have Location header for HTMX")
 }
 
 func TestAuth_TokenAuth(t *testing.T) {

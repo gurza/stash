@@ -566,6 +566,7 @@ func (a *Auth) cleanupExpiredSessions() {
 
 // SessionAuth returns middleware that requires a valid session cookie.
 // Used for web UI routes. Redirects to loginURL if not authenticated.
+// For HTMX requests, uses HX-Redirect header to trigger full page navigation.
 func (a *Auth) SessionAuth(loginURL string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -576,7 +577,15 @@ func (a *Auth) SessionAuth(loginURL string) func(http.Handler) http.Handler {
 					return
 				}
 			}
-			// no valid session, redirect to login
+			// no valid session - handle redirect based on request type
+			if r.Header.Get("HX-Request") == "true" {
+				// HTMX request: use HX-Redirect header to trigger full page navigation
+				// instead of swapping login form into the target element
+				w.Header().Set("HX-Redirect", loginURL)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			// regular request: use standard HTTP redirect
 			http.Redirect(w, r, loginURL, http.StatusSeeOther)
 		})
 	}
