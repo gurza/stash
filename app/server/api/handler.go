@@ -15,6 +15,11 @@ import (
 	"github.com/umputun/stash/app/store"
 )
 
+//go:generate moq -out mocks/kvstore.go -pkg mocks -skip-ensure -fmt goimports . KVStore
+//go:generate moq -out mocks/authprovider.go -pkg mocks -skip-ensure -fmt goimports . AuthProvider
+//go:generate moq -out mocks/formatvalidator.go -pkg mocks -skip-ensure -fmt goimports . FormatValidator
+//go:generate moq -out mocks/gitservice.go -pkg mocks -skip-ensure -fmt goimports . GitService
+
 // sessionCookieNames defines cookie names for session authentication.
 // __Host- prefix requires HTTPS, secure, path=/ (preferred for production).
 // fallback cookie name works on HTTP for development.
@@ -25,11 +30,6 @@ type GitService interface {
 	Commit(req git.CommitRequest) error
 	Delete(key string, author git.Author) error
 }
-
-//go:generate moq -out mocks/kvstore.go -pkg mocks -skip-ensure -fmt goimports . KVStore
-//go:generate moq -out mocks/authprovider.go -pkg mocks -skip-ensure -fmt goimports . AuthProvider
-//go:generate moq -out mocks/formatvalidator.go -pkg mocks -skip-ensure -fmt goimports . FormatValidator
-//go:generate moq -out mocks/gitservice.go -pkg mocks -skip-ensure -fmt goimports . GitService
 
 // KVStore defines the interface for key-value storage operations.
 type KVStore interface {

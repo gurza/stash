@@ -1,7 +1,5 @@
 package server
 
-//go:generate go run internal/schema/main.go schema.json
-
 import (
 	"fmt"
 	"net/http"
@@ -18,6 +16,8 @@ import (
 
 	"github.com/umputun/stash/app/store"
 )
+
+//go:generate go run internal/schema/main.go schema.json
 
 // sessionCookieNames defines cookie names for session authentication.
 // __Host- prefix requires HTTPS, secure, path=/ (preferred for production).
