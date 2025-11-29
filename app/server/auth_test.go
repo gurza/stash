@@ -242,12 +242,12 @@ users:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			user := auth.ValidateUser(tt.username, tt.password)
-			if tt.wantUser {
-				require.NotNil(t, user)
-				assert.Equal(t, tt.username, user.Name)
-			} else {
+			if !tt.wantUser {
 				assert.Nil(t, user)
+				return
 			}
+			require.NotNil(t, user)
+			assert.Equal(t, tt.username, user.Name)
 		})
 	}
 }
@@ -807,10 +807,10 @@ func TestParsePermissionString(t *testing.T) {
 			got, err := parsePermissionString(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.want, got)
+				return
 			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

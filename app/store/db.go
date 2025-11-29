@@ -415,13 +415,13 @@ func (s *Store) adoptQuery(query string) string {
 	result := make([]byte, 0, len(query)+10)
 	paramNum := 1
 	for i := 0; i < len(query); i++ {
-		if query[i] == '?' {
-			result = append(result, '$')
-			result = append(result, fmt.Sprintf("%d", paramNum)...)
-			paramNum++
-		} else {
+		if query[i] != '?' {
 			result = append(result, query[i])
+			continue
 		}
+		result = append(result, '$')
+		result = append(result, fmt.Sprintf("%d", paramNum)...)
+		paramNum++
 	}
 	return string(result)
 }

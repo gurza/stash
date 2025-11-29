@@ -118,9 +118,10 @@ func (h *Handler) handleKeyList(w http.ResponseWriter, r *http.Request) {
 	// check if view_mode was just set via Set-Cookie header (from toggle handler)
 	viewMode := h.getViewMode(r)
 	for _, c := range w.Header()["Set-Cookie"] {
-		if strings.Contains(c, "view_mode=cards") {
+		switch {
+		case strings.Contains(c, "view_mode=cards"):
 			viewMode = "cards"
-		} else if strings.Contains(c, "view_mode=grid") {
+		case strings.Contains(c, "view_mode=grid"):
 			viewMode = "grid"
 		}
 	}

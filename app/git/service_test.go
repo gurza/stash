@@ -41,9 +41,9 @@ func TestService_Commit(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
+				return
 			}
+			require.NoError(t, err)
 
 			// verify commit was called
 			assert.Len(t, st.CommitCalls(), 1)
@@ -56,11 +56,11 @@ func TestService_Commit(t *testing.T) {
 				assert.Empty(t, st.PushCalls())
 			case tc.pushSync:
 				assert.Len(t, st.PullCalls(), 1)
-				if tc.pullErr == nil {
-					assert.Len(t, st.PushCalls(), 1)
-				} else {
+				if tc.pullErr != nil {
 					assert.Empty(t, st.PushCalls())
+					return
 				}
+				assert.Len(t, st.PushCalls(), 1)
 			default:
 				assert.Empty(t, st.PullCalls())
 				assert.Empty(t, st.PushCalls())
@@ -98,9 +98,9 @@ func TestService_Delete(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
+				return
 			}
+			require.NoError(t, err)
 
 			// verify delete was called
 			assert.Len(t, st.DeleteCalls(), 1)
@@ -114,11 +114,11 @@ func TestService_Delete(t *testing.T) {
 				assert.Empty(t, st.PushCalls())
 			case tc.pushSync:
 				assert.Len(t, st.PullCalls(), 1)
-				if tc.pullErr == nil {
-					assert.Len(t, st.PushCalls(), 1)
-				} else {
+				if tc.pullErr != nil {
 					assert.Empty(t, st.PushCalls())
+					return
 				}
+				assert.Len(t, st.PushCalls(), 1)
 			default:
 				assert.Empty(t, st.PullCalls())
 				assert.Empty(t, st.PushCalls())

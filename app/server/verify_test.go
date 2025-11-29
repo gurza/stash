@@ -29,12 +29,12 @@ func TestVerifyAuthConfig(t *testing.T) {
 			require.NoError(t, err, "failed to read test file")
 
 			err = VerifyAuthConfig(data)
-			if tc.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.errMsg)
-			} else {
+			if !tc.wantErr {
 				require.NoError(t, err)
+				return
 			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.errMsg)
 		})
 	}
 }

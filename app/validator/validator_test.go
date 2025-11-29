@@ -86,9 +86,9 @@ func TestService_Validate(t *testing.T) {
 			err := svc.Validate(tt.format, tt.value)
 			if tt.wantErr {
 				assert.Error(t, err, "expected error for %s", tt.name)
-			} else {
-				assert.NoError(t, err, "expected no error for %s", tt.name)
+				return
 			}
+			assert.NoError(t, err, "expected no error for %s", tt.name)
 		})
 	}
 }
