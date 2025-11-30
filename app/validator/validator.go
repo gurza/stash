@@ -40,6 +40,7 @@ func (s *Service) IsValidFormat(format string) bool {
 // Validate checks if value is valid for the given format.
 // Returns nil for text, shell, or unknown formats (no validation).
 // Returns descriptive error for invalid json, yaml, xml, toml, ini, hcl.
+// Note: YAML is extremely permissive - almost any text parses as a valid string scalar.
 func (s *Service) Validate(format string, value []byte) error {
 	switch format {
 	case "json":

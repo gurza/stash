@@ -26,12 +26,15 @@ func TestService_Validate(t *testing.T) {
 		{name: "invalid json missing quote", format: "json", value: []byte(`{"key: "value"}`), wantErr: true},
 		{name: "invalid json trailing comma", format: "json", value: []byte(`{"key": "value",}`), wantErr: true},
 		{name: "invalid json unclosed brace", format: "json", value: []byte(`{"key": "value"`), wantErr: true},
+		{name: "invalid json with comments", format: "json", value: []byte(`{"key": "value" /* comment */}`), wantErr: true},
 
 		// yaml tests
 		{name: "valid yaml simple", format: "yaml", value: []byte("key: value"), wantErr: false},
 		{name: "valid yaml nested", format: "yaml", value: []byte("parent:\n  child: value"), wantErr: false},
 		{name: "valid yaml list", format: "yaml", value: []byte("- item1\n- item2"), wantErr: false},
-		{name: "invalid yaml duplicate key mapping", format: "yaml", value: []byte("a: 1\na: 2: 3"), wantErr: true},
+		{name: "invalid yaml duplicate key", format: "yaml", value: []byte("key: 1\nkey: 2"), wantErr: true},
+		{name: "invalid yaml nested duplicate key", format: "yaml", value: []byte("parent:\n  child: 1\n  child: 2"), wantErr: true},
+		{name: "invalid yaml bad syntax", format: "yaml", value: []byte("a: 1\na: 2: 3"), wantErr: true},
 		{name: "invalid yaml tab indent", format: "yaml", value: []byte("key:\n\tvalue"), wantErr: true},
 
 		// xml tests
@@ -40,6 +43,8 @@ func TestService_Validate(t *testing.T) {
 		{name: "valid xml with attributes", format: "xml", value: []byte(`<root attr="val">content</root>`), wantErr: false},
 		{name: "valid xml self-closing", format: "xml", value: []byte(`<empty/>`), wantErr: false},
 		{name: "valid xml with declaration", format: "xml", value: []byte(`<?xml version="1.0"?><root/>`), wantErr: false},
+		{name: "valid xml with doctype", format: "xml", value: []byte(`<!DOCTYPE html><html></html>`), wantErr: false},
+		{name: "valid xml with cdata", format: "xml", value: []byte(`<root><![CDATA[some <data>]]></root>`), wantErr: false},
 		{name: "invalid xml unclosed tag", format: "xml", value: []byte(`<root>content`), wantErr: true},
 		{name: "invalid xml mismatched tags", format: "xml", value: []byte(`<root>content</other>`), wantErr: true},
 		{name: "invalid xml plain text", format: "xml", value: []byte(`just plain text`), wantErr: true},
@@ -53,18 +58,21 @@ func TestService_Validate(t *testing.T) {
 		{name: "valid toml number", format: "toml", value: []byte(`port = 8080`), wantErr: false},
 		{name: "invalid toml missing equals", format: "toml", value: []byte(`key "value"`), wantErr: true},
 		{name: "invalid toml bad string", format: "toml", value: []byte(`key = "unclosed`), wantErr: true},
+		{name: "invalid toml duplicate key", format: "toml", value: []byte("key = 1\nkey = 2"), wantErr: true},
 
 		// ini tests
 		{name: "valid ini simple", format: "ini", value: []byte("key=value"), wantErr: false},
 		{name: "valid ini with section", format: "ini", value: []byte("[section]\nkey=value"), wantErr: false},
 		{name: "valid ini with spaces", format: "ini", value: []byte("key = value"), wantErr: false},
 		{name: "valid ini comment", format: "ini", value: []byte("; comment\nkey=value"), wantErr: false},
+		{name: "valid ini duplicate key", format: "ini", value: []byte("[section]\nkey=1\nkey=2"), wantErr: false},
 		{name: "invalid ini no equals", format: "ini", value: []byte("[section]\nbadline"), wantErr: true},
 
 		// hcl tests
 		{name: "valid hcl simple", format: "hcl", value: []byte(`key = "value"`), wantErr: false},
 		{name: "valid hcl block", format: "hcl", value: []byte("resource \"aws_instance\" \"example\" {\n  ami = \"ami-12345\"\n}"), wantErr: false},
 		{name: "valid hcl nested", format: "hcl", value: []byte("server {\n  host = \"localhost\"\n  port = 8080\n}"), wantErr: false},
+		{name: "valid hcl duplicate blocks", format: "hcl", value: []byte("resource \"a\" \"b\" {}\nresource \"a\" \"b\" {}"), wantErr: false},
 		{name: "invalid hcl unclosed brace", format: "hcl", value: []byte("server {\n  host = \"localhost\""), wantErr: true},
 		{name: "invalid hcl bad syntax", format: "hcl", value: []byte("key value"), wantErr: true},
 
@@ -79,6 +87,15 @@ func TestService_Validate(t *testing.T) {
 		{name: "empty value yaml", format: "yaml", value: []byte{}, wantErr: false},
 		{name: "empty value text", format: "text", value: []byte{}, wantErr: false},
 		{name: "whitespace only json", format: "json", value: []byte("   "), wantErr: true},
+		{name: "nil value json", format: "json", value: nil, wantErr: true},
+		{name: "nil value yaml", format: "yaml", value: nil, wantErr: false},
+		{name: "nil value xml", format: "xml", value: nil, wantErr: true},
+
+		// yaml permissiveness: almost any text is valid yaml (parses as string scalar)
+		{name: "yaml accepts plain string", format: "yaml", value: []byte("just a string"), wantErr: false},
+		{name: "yaml accepts gibberish", format: "yaml", value: []byte("6080sdf>\n.sdas["), wantErr: false},
+		{name: "yaml accepts number as string", format: "yaml", value: []byte("12345"), wantErr: false},
+		{name: "yaml accepts url-like text", format: "yaml", value: []byte("https://example.com/path"), wantErr: false},
 	}
 
 	for _, tt := range tests {

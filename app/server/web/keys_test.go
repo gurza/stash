@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"strconv"
 	"testing"
 	"time"
 
@@ -529,7 +529,7 @@ func TestHandler_HandleKeyUpdate_ConflictDetection(t *testing.T) {
 		req.PostForm = map[string][]string{
 			"value":      {"my edited value"},
 			"format":     {"text"},
-			"updated_at": {itoa(originalTime.Unix())}, // old timestamp
+			"updated_at": {strconv.FormatInt(originalTime.Unix(), 10)}, // old timestamp
 		}
 		rec := httptest.NewRecorder()
 		h.handleKeyUpdate(rec, req)
@@ -561,7 +561,7 @@ func TestHandler_HandleKeyUpdate_ConflictDetection(t *testing.T) {
 		req.PostForm = map[string][]string{
 			"value":           {"my edited value"},
 			"format":          {"text"},
-			"updated_at":      {itoa(originalTime.Unix())},
+			"updated_at":      {strconv.FormatInt(originalTime.Unix(), 10)},
 			"force_overwrite": {"true"},
 		}
 		rec := httptest.NewRecorder()
@@ -614,11 +614,6 @@ func TestHandler_RenderValidationError(t *testing.T) {
 		assert.Contains(t, body, "Submit Anyway")
 		assert.Contains(t, body, `name="force"`)
 	})
-}
-
-// itoa is a helper to convert int64 to string.
-func itoa(n int64) string {
-	return strings.TrimSpace(strings.Replace(time.Unix(n, 0).Format("20060102150405"), "150405", "", 1))
 }
 
 // newTestHandlerWithStoreAndAuth creates a test handler with custom store and auth.

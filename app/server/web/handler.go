@@ -1,11 +1,6 @@
 // Package web provides HTTP handlers for the web UI.
 package web
 
-//go:generate moq -out mocks/kvstore.go -pkg mocks -skip-ensure -fmt goimports . KVStore
-//go:generate moq -out mocks/validator.go -pkg mocks -skip-ensure -fmt goimports . Validator
-//go:generate moq -out mocks/authprovider.go -pkg mocks -skip-ensure -fmt goimports . AuthProvider
-//go:generate moq -out mocks/gitservice.go -pkg mocks -skip-ensure -fmt goimports . GitService
-
 import (
 	"embed"
 	"encoding/base64"
@@ -25,6 +20,11 @@ import (
 	"github.com/umputun/stash/app/git"
 	"github.com/umputun/stash/app/store"
 )
+
+//go:generate moq -out mocks/kvstore.go -pkg mocks -skip-ensure -fmt goimports . KVStore
+//go:generate moq -out mocks/validator.go -pkg mocks -skip-ensure -fmt goimports . Validator
+//go:generate moq -out mocks/authprovider.go -pkg mocks -skip-ensure -fmt goimports . AuthProvider
+//go:generate moq -out mocks/gitservice.go -pkg mocks -skip-ensure -fmt goimports . GitService
 
 // sessionCookieNames defines cookie names for session authentication.
 // __Host- prefix requires HTTPS, secure, path=/ (preferred for production).
