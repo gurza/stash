@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.1] - 2025-11-30
+
+### Changed
+- Refactored code to use Go 1.22+ integer range syntax
+- Eliminated else blocks using early returns and continue
+- Simplified DB queries with extended adoptQuery
+- Moved conflict detection from web handler to store layer
+- Enhanced linter configuration with additional static analysis rules
+
+### Fixed
+- UI icons and modal/pagination issues
+
 ## [0.10.0] - 2025-11-29
 
 ### Added
