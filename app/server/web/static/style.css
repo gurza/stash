@@ -337,6 +337,7 @@ tr.clickable-row {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
 }
 
 #modal-content {
@@ -969,13 +970,6 @@ tr.clickable-row {
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-all;
-}
-
-/* Modal form border */
-.modal form {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    margin: -1px;
 }
 
 /* Conflict warning */

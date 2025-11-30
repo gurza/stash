@@ -66,8 +66,9 @@
     </tbody>
 </table>
 {{end}}
-<span id="key-count" hx-swap-oob="innerHTML" style="display:none">{{.TotalKeys}} {{if eq .TotalKeys 1}}key{{else}}keys{{end}}{{if .Search}} matching "{{.Search}}"{{end}}</span>
-<span id="sort-label" hx-swap-oob="innerHTML" style="display:none">{{.SortMode | sortModeLabel}}</span>
+<div style="display:none">
+<span id="key-count" hx-swap-oob="innerHTML">{{.TotalKeys}} {{if eq .TotalKeys 1}}key{{else}}keys{{end}}{{if .Search}} matching "{{.Search}}"{{end}}</span>
+<span id="sort-label" hx-swap-oob="innerHTML">{{.SortMode | sortModeLabel}}</span>
 <span id="pagination" hx-swap-oob="outerHTML" class="pagination">
     {{if gt .TotalPages 1}}
     <button class="btn-page{{if not .HasPrev}} disabled{{end}}"
@@ -84,14 +85,17 @@
     {{end}}
 </span>
 <input type="hidden" id="current-page" hx-swap-oob="outerHTML" name="page" value="{{.Page}}">
+</div>
 {{else if .Search}}
 <div class="empty-state">
     <p>No keys matching "{{.Search}}"</p>
 </div>
-<span id="key-count" hx-swap-oob="innerHTML" style="display:none">no keys matching "{{.Search}}"</span>
-<span id="sort-label" hx-swap-oob="innerHTML" style="display:none">{{.SortMode | sortModeLabel}}</span>
+<div style="display:none">
+<span id="key-count" hx-swap-oob="innerHTML">no keys matching "{{.Search}}"</span>
+<span id="sort-label" hx-swap-oob="innerHTML">{{.SortMode | sortModeLabel}}</span>
 <span id="pagination" hx-swap-oob="outerHTML" class="pagination"></span>
 <input type="hidden" id="current-page" hx-swap-oob="outerHTML" name="page" value="1">
+</div>
 {{else}}
 <div class="empty-state">
     <p>No keys stored yet</p>
@@ -104,9 +108,11 @@
     </button>
     {{end}}
 </div>
-<span id="key-count" hx-swap-oob="innerHTML" style="display:none">no keys</span>
-<span id="sort-label" hx-swap-oob="innerHTML" style="display:none">{{.SortMode | sortModeLabel}}</span>
+<div style="display:none">
+<span id="key-count" hx-swap-oob="innerHTML">no keys</span>
+<span id="sort-label" hx-swap-oob="innerHTML">{{.SortMode | sortModeLabel}}</span>
 <span id="pagination" hx-swap-oob="outerHTML" class="pagination"></span>
 <input type="hidden" id="current-page" hx-swap-oob="outerHTML" name="page" value="1">
+</div>
 {{end}}
 {{end}}
