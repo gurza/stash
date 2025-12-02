@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.2] - 2025-12-01
+
+### Changed
+- Unified blue color scheme using CSS variables for consistency
+- Increased default session TTL from 24h to 30 days
+
 ## [0.10.1] - 2025-11-30
 
 ### Changed
