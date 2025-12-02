@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.4] - 2025-12-02
+
+### Fixed
+- Removed border from cards container
+
 ## [0.10.3] - 2025-12-02
 
 ### Changed
