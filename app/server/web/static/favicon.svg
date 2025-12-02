@@ -1,9 +1,9 @@
 <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
   <style>
-    .bg { fill: #2563eb; }
+    .bg { fill: #3b82f6; }
     .fg { fill: #fff; }
     @media (prefers-color-scheme: dark) {
-      .bg { fill: #1e40af; }
+      .bg { fill: #2563eb; }
       .fg { fill: #93c5fd; }
     }
   </style>
