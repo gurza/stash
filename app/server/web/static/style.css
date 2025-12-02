@@ -6,8 +6,8 @@
     --color-border: #dee2e6;
     --color-text: #212529;
     --color-text-muted: #6c757d;
-    --color-primary: #2563eb;
-    --color-primary-hover: #1d4ed8;
+    --color-primary: #3b82f6;
+    --color-primary-hover: #2563eb;
     --color-danger: #f87171;
     --color-danger-hover: #ef4444;
     --color-success: #16a34a;
@@ -171,12 +171,12 @@ body {
 
 .btn-edit {
     background-color: transparent;
-    color: #60a5fa;
-    border: 1px solid #60a5fa;
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
 }
 
 .btn-edit:hover {
-    background-color: #60a5fa;
+    background-color: var(--color-primary);
     color: white;
 }
 
