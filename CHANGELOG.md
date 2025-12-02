@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.3] - 2025-12-02
+
+### Changed
+- Improved table styling with cleaner header and distinct background color
+- Reduced table row padding for more compact look
+- Updated favicon colors to match primary color scheme
+
 ## [0.10.2] - 2025-12-01
 
 ### Changed
