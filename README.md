@@ -457,7 +457,7 @@ Returns `pong` with status 200.
 
 Access the web interface at `http://localhost:8080/`. Features:
 
-- Table view of all keys with size and timestamps
+- Card and table view modes with size and timestamps
 - Search keys by name
 - View, create, edit, and delete keys
 - Syntax highlighting for json, yaml, xml, toml, ini, hcl, shell formats (selectable via dropdown)
@@ -465,24 +465,38 @@ Access the web interface at `http://localhost:8080/`. Features:
 - Binary value display (base64 encoded)
 - Light/dark theme toggle
 
-<details markdown>
-  <summary>Screenshots</summary>
-
-### Dashboard - Dark Theme
-
 ![Dashboard Dark](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/dashboard-dark-desktop.png)
 
-### Dashboard - Light Theme
+<details>
+  <summary>More screenshots</summary>
 
-![Dashboard Light](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/dashboard-light-desktop.png)
+### Dashboard - Dark Theme (Table View)
 
-### View with Syntax Highlighting
+![Dashboard Dark Table](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/dashboard-dark-table.png)
 
-![View Modal](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/view-modal-json.png)
+### Dashboard - Light Theme (Card View)
+
+![Dashboard Light Cards](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/dashboard-light-desktop.png)
+
+### Dashboard - Light Theme (Table View)
+
+![Dashboard Light Table](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/dashboard-light-table.png)
+
+### View with Syntax Highlighting (JSON)
+
+![View Modal JSON](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/view-modal-json.png)
+
+### View with Syntax Highlighting (YAML)
+
+![View Modal YAML](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/view-modal-yaml.png)
 
 ### Edit Form with Format Selector
 
 ![Edit Form](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/edit-form.png)
+
+### Edit Form with Validation Error
+
+![Edit Form Error](https://raw.githubusercontent.com/umputun/stash/master/site/docs/screenshots/edit-form-error.png)
 
 ### Login Form
 
