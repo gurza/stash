@@ -3,6 +3,7 @@
     --color-bg: #ffffff;
     --color-surface: #f8f9fa;
     --color-surface-hover: #e9ecef;
+    --color-table-header: #f1f3f5;
     --color-border: #dee2e6;
     --color-text: #212529;
     --color-text-muted: #6c757d;
@@ -23,6 +24,7 @@
     --color-bg: #1a1a1a;
     --color-surface: #2a2a2a;
     --color-surface-hover: #3a3a3a;
+    --color-table-header: #303030;
     --color-border: #404040;
     --color-text: #f5f5f5;
     --color-text-muted: #a0a0a0;
@@ -36,6 +38,7 @@
         --color-bg: #1a1a1a;
         --color-surface: #2a2a2a;
         --color-surface-hover: #3a3a3a;
+        --color-table-header: #303030;
         --color-border: #404040;
         --color-text: #f5f5f5;
         --color-text-muted: #a0a0a0;
@@ -238,7 +241,7 @@ body {
 .table-container {
     background-color: var(--color-surface);
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    border: 1px solid var(--color-border);
     overflow: hidden;
 }
 
@@ -250,22 +253,25 @@ table {
 th, td {
     padding: 12px 16px;
     text-align: left;
-    border-bottom: 1px solid var(--color-border);
 }
 
 th {
     font-weight: 600;
     color: var(--color-text-muted);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-size: 13px;
+    background-color: var(--color-table-header);
+    border-bottom: 1px solid var(--color-border);
+}
+
+td {
+    border-bottom: 1px solid var(--color-border);
 }
 
 tr:last-child td {
     border-bottom: none;
 }
 
-tr:hover td {
+tbody tr:hover td {
     background-color: var(--color-surface-hover);
 }
 
@@ -277,6 +283,7 @@ tr.clickable-row {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, "Courier New", monospace;
     font-size: 13px;
     word-break: break-all;
+    color: var(--color-text);
 }
 
 .size-cell, .date-cell {
