@@ -564,7 +564,7 @@ tr.clickable-row {
 /* Remove table-container styling when showing cards */
 .table-container:has(.cards-container) {
     background-color: transparent;
-    box-shadow: none;
+    border: none;
     border-radius: 0;
 }
 
