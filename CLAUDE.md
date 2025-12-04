@@ -146,6 +146,7 @@ POST   /logout                   # clear session, redirect to login
 - Auth hot-reload requires `--auth.hot-reload` flag to enable
 - Web handlers check permissions server-side (not just UI conditions)
 - Cache: optional loading cache wrapper, populated on reads, invalidated on writes
+- Changelog: CHANGELOG.md (uppercase) in project root, uses Keep a Changelog format
 - Keep it simple - no over-engineering
 
 ## Testing Selectors (Playwright)

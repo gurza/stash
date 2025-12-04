@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.12.0] - 2025-12-04
+
+### Added
+- Key history viewing and restore functionality in web UI (#25)
+- API endpoint for key history (`GET /kv/history/{key}`)
+- Selective session invalidation on auth config reload - only affected users are logged out (#24)
+
 ## [0.11.0] - 2025-12-04
 
 ### Added
