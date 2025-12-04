@@ -545,3 +545,23 @@ func newTestHandlerWithAuth(t *testing.T, auth AuthProvider) *Handler {
 	require.NoError(t, err)
 	return h
 }
+
+// newTestHandlerWithGit creates a test handler with git service.
+func newTestHandlerWithGit(t *testing.T, gitSvc GitService) *Handler {
+	t.Helper()
+	st := &mocks.KVStoreMock{
+		ListFunc:          func(context.Context) ([]store.KeyInfo, error) { return nil, nil },
+		GetWithFormatFunc: func(_ context.Context, key string) ([]byte, string, error) { return []byte("value"), "text", nil },
+		SetFunc:           func(_ context.Context, key string, value []byte, format string) error { return nil },
+	}
+	auth := &mocks.AuthProviderMock{
+		EnabledFunc:             func() bool { return false },
+		GetSessionUserFunc:      func(_ context.Context, token string) (string, bool) { return "", false },
+		FilterUserKeysFunc:      func(username string, keys []string) []string { return keys },
+		CheckUserPermissionFunc: func(username, key string, write bool) bool { return true },
+		UserCanWriteFunc:        func(username string) bool { return true },
+	}
+	h, err := New(st, auth, defaultValidatorMock(), gitSvc, Config{})
+	require.NoError(t, err)
+	return h
+}

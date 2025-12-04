@@ -61,14 +61,25 @@ make run      # run with logging enabled
 
 **Local testing with auth**: Use `auth-private.yml` (gitignored) with users: admin, readonly, scoped (all password: "testpass"). Run with `./stash server --auth.file=auth-private.yml --auth.hot-reload --dbg`
 
+**Manual API testing**: Use `requests.http` with JetBrains IDE or CLI:
+```bash
+# JetBrains HTTP Client CLI (ijhttp)
+ijhttp requests.http -e local -E http-client.env.json
+
+# or with Docker
+docker run --rm -v $(pwd):/workdir jetbrains/intellij-http-client \
+  -e local -E http-client.env.json requests.http
+```
+
 ## API
 
 ```
-GET    /kv/           # list keys (returns JSON array of KeyInfo, supports ?prefix=)
-GET    /kv/{key...}   # get value (returns raw body, 200/404)
-PUT    /kv/{key...}   # set value (body is value, returns 200)
-DELETE /kv/{key...}   # delete key (returns 204/404)
-GET    /ping          # health check (returns "pong")
+GET    /kv/                  # list keys (returns JSON array of KeyInfo, supports ?prefix=)
+GET    /kv/history/{key...}  # get key history (requires git, returns JSON array)
+GET    /kv/{key...}          # get value (returns raw body, 200/404)
+PUT    /kv/{key...}          # set value (body is value, returns 200)
+DELETE /kv/{key...}          # delete key (returns 204/404)
+GET    /ping                 # health check (returns "pong")
 ```
 
 Keys can contain slashes (e.g., `app/config/database`).
@@ -78,17 +89,20 @@ List endpoint returns only keys the caller has read permission for when auth is 
 ## Web UI Routes
 
 ```
-GET    /                         # main page with key list
-GET    /web/keys                 # HTMX partial: key table (supports ?search=)
-GET    /web/keys/new             # HTMX partial: new key form
-GET    /web/keys/view/{key...}   # HTMX partial: view modal
-GET    /web/keys/edit/{key...}   # HTMX partial: edit form
-POST   /web/keys                 # create new key
-PUT    /web/keys/{key...}        # update key value
-DELETE /web/keys/{key...}        # delete key
-POST   /web/theme                # toggle theme (light/dark)
-POST   /web/view-mode            # toggle view mode (grid/cards)
-POST   /web/sort                 # cycle sort order
+GET    /                              # main page with key list
+GET    /web/keys                      # HTMX partial: key table (supports ?search=)
+GET    /web/keys/new                  # HTMX partial: new key form
+GET    /web/keys/view/{key...}        # HTMX partial: view modal
+GET    /web/keys/edit/{key...}        # HTMX partial: edit form
+GET    /web/keys/history/{key...}     # HTMX partial: history modal (requires git)
+GET    /web/keys/revision/{key...}    # HTMX partial: revision view (requires git)
+POST   /web/keys                      # create new key
+PUT    /web/keys/{key...}             # update key value
+DELETE /web/keys/{key...}             # delete key
+POST   /web/keys/restore/{key...}     # restore key to revision (requires git)
+POST   /web/theme                     # toggle theme (light/dark)
+POST   /web/view-mode                 # toggle view mode (grid/cards)
+POST   /web/sort                      # cycle sort order
 ```
 
 ## Web UI Structure
