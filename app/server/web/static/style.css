@@ -1082,6 +1082,8 @@ tr.clickable-row {
     font-weight: 500;
     background-color: var(--color-primary);
     color: white;
+    border: 1px solid var(--color-primary);
     border-radius: 3px;
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, "Courier New", monospace;
+    margin-top: 2px;
 }
