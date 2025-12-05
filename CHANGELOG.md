@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.12.1] - 2025-12-04
+
+### Fixed
+- Align revision badge with format badge in history modal
+
 ## [0.12.0] - 2025-12-04
 
 ### Added
