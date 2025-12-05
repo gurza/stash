@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -699,6 +702,40 @@ func TestSignals(t *testing.T) {
 	require.NotPanics(t, func() {
 		signals(cancel)
 	})
+}
+
+func TestSighupHandler(t *testing.T) {
+	var reloadCalled atomic.Bool
+	reload := func(ctx context.Context) error {
+		reloadCalled.Store(true)
+		return nil
+	}
+
+	sighupHandler(t.Context(), reload)
+
+	// send SIGHUP to current process
+	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+
+	// verify reload was called
+	require.Eventually(t, reloadCalled.Load, time.Second, 10*time.Millisecond)
+}
+
+func TestSighupHandler_ReloadError(t *testing.T) {
+	var reloadCalls atomic.Int32
+	reload := func(ctx context.Context) error {
+		reloadCalls.Add(1)
+		return errors.New("reload failed")
+	}
+
+	sighupHandler(t.Context(), reload)
+
+	// send SIGHUP - error should be logged but handler continues
+	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+	require.Eventually(t, func() bool { return reloadCalls.Load() >= 1 }, time.Second, 10*time.Millisecond)
+
+	// send another SIGHUP - handler should still work after error
+	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGHUP))
+	require.Eventually(t, func() bool { return reloadCalls.Load() >= 2 }, time.Second, 10*time.Millisecond)
 }
 
 func TestValidateBaseURL(t *testing.T) {

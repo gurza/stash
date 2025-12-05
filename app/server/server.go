@@ -165,6 +165,14 @@ func (s *Server) Run(ctx context.Context) error {
 	return nil
 }
 
+// AuthReload reloads auth configuration from file. Returns nil if auth is not enabled.
+func (s *Server) AuthReload(ctx context.Context) error {
+	if s.auth == nil || !s.auth.Enabled() {
+		return nil
+	}
+	return s.auth.Reload(ctx)
+}
+
 // handler returns the HTTP handler, wrapping routes with base URL support if configured.
 func (s *Server) handler() http.Handler {
 	routes := s.routes()

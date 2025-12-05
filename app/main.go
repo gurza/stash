@@ -141,7 +141,6 @@ func runServer(ctx context.Context) error {
 		log.Printf("[INFO] cache enabled, max keys: %d", opts.Cache.MaxKeys)
 	}
 
-	// initialize storage
 	// initialize store - keep raw store reference for session operations
 	rawStore, err := store.New(opts.DB)
 	if err != nil {
@@ -193,6 +192,9 @@ func runServer(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize server: %w", err)
 	}
+
+	// set up SIGHUP handler for auth config reload
+	sighupHandler(ctx, srv.AuthReload)
 
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("server failed: %w", err)
@@ -303,4 +305,18 @@ func signals(cancel context.CancelFunc) {
 		}
 	}()
 	signal.Notify(sigChan, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+}
+
+func sighupHandler(ctx context.Context, reload func(context.Context) error) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGHUP)
+	go func() {
+		for range sigChan {
+			if err := reload(ctx); err != nil {
+				log.Printf("[WARN] failed to reload auth config: %v", err)
+			} else {
+				log.Printf("[INFO] auth config reloaded via SIGHUP")
+			}
+		}
+	}()
 }
