@@ -220,10 +220,16 @@ stash server --auth.file=/path/to/stash-auth.yml --auth.hot-reload
 
 When the auth config file changes:
 - New users, tokens, and permissions take effect immediately
-- All active sessions are invalidated (users must re-login)
+- Sessions are selectively invalidated (only users removed or with password changes must re-login)
 - Invalid config changes are rejected and the existing config is preserved
 
 Hot-reload watches the directory containing the auth file, so it works correctly with editors that use atomic saves (vim, VSCode, etc.).
+
+Alternatively, send `SIGHUP` to trigger a manual reload without the `--auth.hot-reload` flag:
+
+```bash
+kill -HUP $(pgrep stash)
+```
 
 ### Session Storage
 
