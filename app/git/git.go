@@ -6,10 +6,14 @@ package git
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	log "github.com/go-pkgz/lgr"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -67,6 +71,7 @@ type Config struct {
 type Store struct {
 	cfg  Config
 	repo *git.Repository
+	mu   sync.Mutex
 }
 
 // New creates a new git store, initializing or opening the repository
@@ -188,6 +193,11 @@ func (s *Store) Commit(req CommitRequest) error {
 		return err
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+
 	// default format to text
 	format := req.Format
 	if format == "" {
@@ -220,13 +230,13 @@ func (s *Store) Commit(req CommitRequest) error {
 
 	// commit with metadata including format
 	msg := fmt.Sprintf("%s %s\n\ntimestamp: %s\noperation: %s\nkey: %s\nformat: %s",
-		req.Operation, req.Key, time.Now().Format(time.RFC3339), req.Operation, req.Key, format)
+		req.Operation, req.Key, now.Format(time.RFC3339), req.Operation, req.Key, format)
 
 	_, commitErr := wt.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  req.Author.Name,
 			Email: req.Author.Email,
-			When:  time.Now(),
+			When:  now,
 		},
 	})
 	if commitErr != nil {
@@ -244,6 +254,10 @@ func (s *Store) Delete(key string, author Author) error {
 		return err
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
 	filePath := keyToPath(key)
 	fullPath := filepath.Join(s.cfg.Path, filePath)
 
@@ -268,12 +282,12 @@ func (s *Store) Delete(key string, author Author) error {
 	}
 
 	// commit deletion
-	msg := fmt.Sprintf("delete %s\n\ntimestamp: %s\noperation: delete\nkey: %s", key, time.Now().Format(time.RFC3339), key)
+	msg := fmt.Sprintf("delete %s\n\ntimestamp: %s\noperation: delete\nkey: %s", key, now.Format(time.RFC3339), key)
 	_, commitErr := wt.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  author.Name,
 			Email: author.Email,
-			When:  time.Now(),
+			When:  now,
 		},
 	})
 	if commitErr != nil {
@@ -288,6 +302,9 @@ func (s *Store) Push() error {
 	if s.cfg.Remote == "" {
 		return nil // no remote configured
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	var auth transport.AuthMethod
 	if s.cfg.SSHKey != "" {
@@ -313,6 +330,9 @@ func (s *Store) Push() error {
 
 // Head returns the current HEAD commit hash as a short string
 func (s *Store) Head() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	ref, err := s.repo.Head()
 	if err != nil {
 		return "", fmt.Errorf("failed to get HEAD: %w", err)
@@ -325,6 +345,9 @@ func (s *Store) Pull() error {
 	if s.cfg.Remote == "" {
 		return nil // no remote configured
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	var auth transport.AuthMethod
 	if s.cfg.SSHKey != "" {
@@ -353,6 +376,9 @@ func (s *Store) Pull() error {
 
 // Checkout switches to specified revision (commit, tag, or branch)
 func (s *Store) Checkout(rev string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	wt, err := s.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
@@ -392,6 +418,9 @@ func (s *Store) Checkout(rev string) error {
 // Format is extracted from the commit message metadata of the last commit that modified each file.
 // If no format is found in the commit message, defaults to "text".
 func (s *Store) ReadAll() (map[string]KeyValue, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	result := make(map[string]KeyValue)
 
 	walkErr := filepath.Walk(s.cfg.Path, func(path string, info os.FileInfo, err error) error {
@@ -447,6 +476,9 @@ func (s *Store) History(key string, limit int) ([]HistoryEntry, error) {
 		return nil, err
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	filePath := keyToPath(key)
 
 	logIter, err := s.repo.Log(&git.LogOptions{
@@ -461,9 +493,14 @@ func (s *Store) History(key string, limit int) ([]HistoryEntry, error) {
 	count := 0
 
 	for limit <= 0 || count < limit {
-		commit, err := logIter.Next()
-		if err != nil {
-			break // end of history or error
+		commit, iterErr := logIter.Next()
+		if iterErr != nil {
+			if errors.Is(iterErr, io.EOF) {
+				break // normal end of history
+			}
+			// log unexpected errors but continue with partial results
+			log.Printf("[WARN] git history iteration error for key %q: %v", key, iterErr)
+			break
 		}
 
 		// extract metadata from commit
@@ -475,17 +512,8 @@ func (s *Store) History(key string, limit int) ([]HistoryEntry, error) {
 			Format:    parseFormatFromCommit(commit.Message),
 		}
 
-		// get file content at this commit
-		tree, treeErr := commit.Tree()
-		if treeErr == nil {
-			file, fileErr := tree.File(filePath)
-			if fileErr == nil {
-				content, contentErr := file.Contents()
-				if contentErr == nil {
-					entry.Value = []byte(content)
-				}
-			}
-		}
+		// get file content at this commit (may be missing for delete commits)
+		entry.Value = s.getFileContentAtCommit(commit, filePath, key, entry.Hash)
 
 		entries = append(entries, entry)
 		count++
@@ -494,11 +522,37 @@ func (s *Store) History(key string, limit int) ([]HistoryEntry, error) {
 	return entries, nil
 }
 
+// getFileContentAtCommit retrieves file content at a specific commit.
+// returns nil if file doesn't exist (expected for delete commits).
+func (s *Store) getFileContentAtCommit(commit *object.Commit, filePath, key, hash string) []byte {
+	tree, treeErr := commit.Tree()
+	if treeErr != nil {
+		log.Printf("[DEBUG] git history: failed to get tree at %s for key %q: %v", hash, key, treeErr)
+		return nil
+	}
+
+	file, fileErr := tree.File(filePath)
+	if fileErr != nil {
+		return nil // file not found is expected for delete commits
+	}
+
+	content, contentErr := file.Contents()
+	if contentErr != nil {
+		log.Printf("[DEBUG] git history: failed to read content at %s for key %q: %v", hash, key, contentErr)
+		return nil
+	}
+
+	return []byte(content)
+}
+
 // GetRevision returns value and format at specific revision.
 func (s *Store) GetRevision(key, rev string) ([]byte, string, error) {
 	if err := s.validateKey(key); err != nil {
 		return nil, "", err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	filePath := keyToPath(key)
 
