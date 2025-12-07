@@ -70,6 +70,7 @@
 <div style="display:none">
 <span id="key-count" hx-swap-oob="innerHTML">{{.TotalKeys}} {{if eq .TotalKeys 1}}key{{else}}keys{{end}}{{if .Search}} matching "{{.Search}}"{{end}}</span>
 <span id="sort-label" hx-swap-oob="innerHTML">{{.SortMode | sortModeLabel}}</span>
+<span id="view-mode-icon" hx-swap-oob="innerHTML">{{if eq .ViewMode.String "cards"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>{{else}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>{{end}}</span>
 <span id="pagination" hx-swap-oob="outerHTML" class="pagination">
     {{if gt .TotalPages 1}}
     <button class="btn-page{{if not .HasPrev}} disabled{{end}}"
@@ -94,6 +95,7 @@
 <div style="display:none">
 <span id="key-count" hx-swap-oob="innerHTML">no keys matching "{{.Search}}"</span>
 <span id="sort-label" hx-swap-oob="innerHTML">{{.SortMode | sortModeLabel}}</span>
+<span id="view-mode-icon" hx-swap-oob="innerHTML">{{if eq .ViewMode.String "cards"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>{{else}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>{{end}}</span>
 <span id="pagination" hx-swap-oob="outerHTML" class="pagination"></span>
 <input type="hidden" id="current-page" hx-swap-oob="outerHTML" name="page" value="1">
 </div>
@@ -112,6 +114,7 @@
 <div style="display:none">
 <span id="key-count" hx-swap-oob="innerHTML">no keys</span>
 <span id="sort-label" hx-swap-oob="innerHTML">{{.SortMode | sortModeLabel}}</span>
+<span id="view-mode-icon" hx-swap-oob="innerHTML">{{if eq .ViewMode.String "cards"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>{{else}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>{{end}}</span>
 <span id="pagination" hx-swap-oob="outerHTML" class="pagination"></span>
 <input type="hidden" id="current-page" hx-swap-oob="outerHTML" name="page" value="1">
 </div>

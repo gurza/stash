@@ -29,17 +29,13 @@
             + New Key
         </button>
         {{end}}
-        <button class="btn-icon"
+        <button id="view-mode-btn" class="btn-icon"
                 hx-post="{{.BaseURL}}/web/view-mode"
                 hx-target="#keys-table"
                 hx-swap="innerHTML"
                 hx-include="[name='search'], [name='page']"
                 title="Toggle view mode">
-            {{if eq .ViewMode.String "cards"}}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-            {{else}}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-            {{end}}
+            <span id="view-mode-icon">{{if eq .ViewMode.String "cards"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>{{else}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>{{end}}</span>
         </button>
         <form hx-post="{{.BaseURL}}/web/theme" hx-swap="none">
             <button type="submit" class="btn-icon" title="Toggle theme">
