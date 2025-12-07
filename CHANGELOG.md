@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.3] - 2025-12-07
+
+### Fixed
+- View mode icon not updating on toggle (OOB swap)
+- Card view click propagation in actions area
+
+### Changed
+- Cleanup comments and reduce duplication
+
 ## [0.13.2] - 2025-12-07
 
 ### Fixed
