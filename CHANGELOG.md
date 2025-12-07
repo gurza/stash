@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.1] - 2025-12-07
+
+### Fixed
+- Code review issues in web and auth handlers (#29)
+  - Missing template fields in permission denied paths
+  - Context cancellation check in auth hot-reload
+  - Error logging in InvalidateSession
+  - Session cookie names extracted to shared package
+
+### Changed
+- Move history buttons to left side with clock icon in view and revision modals
+
 ## [0.13.0] - 2025-12-05
 
 ### Added
