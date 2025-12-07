@@ -446,6 +446,38 @@ func TestHandler_GetCurrentUser(t *testing.T) {
 	})
 }
 
+func TestHandler_GetIdentityForLog(t *testing.T) {
+	auth := &mocks.AuthProviderMock{
+		GetSessionUserFunc: func(_ context.Context, token string) (string, bool) {
+			if token == "valid-token" {
+				return "testuser", true
+			}
+			return "", false
+		},
+	}
+	h := newTestHandlerWithAuth(t, auth)
+
+	t.Run("returns user:username for authenticated user", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "valid-token"})
+		identity := h.getIdentityForLog(req)
+		assert.Equal(t, "user:testuser", identity)
+	})
+
+	t.Run("returns anonymous for no session", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		identity := h.getIdentityForLog(req)
+		assert.Equal(t, "anonymous", identity)
+	})
+
+	t.Run("returns anonymous for invalid session", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "invalid-session"})
+		identity := h.getIdentityForLog(req)
+		assert.Equal(t, "anonymous", identity)
+	})
+}
+
 // defaultValidatorMock returns a validator mock with all methods implemented.
 func defaultValidatorMock() *mocks.ValidatorMock {
 	formats := []string{"text", "json", "yaml", "xml", "toml", "ini", "hcl", "shell"}

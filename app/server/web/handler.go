@@ -331,6 +331,15 @@ func (h *Handler) getCurrentUser(r *http.Request) string {
 	return ""
 }
 
+// getIdentityForLog returns identity string for audit logging.
+// returns "user:xxx" for authenticated users, "anonymous" otherwise.
+func (h *Handler) getIdentityForLog(r *http.Request) string {
+	if username := h.getCurrentUser(r); username != "" {
+		return "user:" + username
+	}
+	return "anonymous"
+}
+
 // getAuthor returns git author for the given username.
 func (h *Handler) getAuthor(username string) git.Author {
 	if username == "" {

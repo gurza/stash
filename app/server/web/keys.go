@@ -145,6 +145,8 @@ func (h *Handler) handleKeyView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[DEBUG] view %s (%d bytes, format=%s)", key, len(value), format)
+
 	displayValue, isBinary := h.valueForDisplay(value)
 	modalWidth, textareaHeight := h.calculateModalDimensions(displayValue)
 
@@ -334,7 +336,7 @@ func (h *Handler) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[INFO] create %q (%d bytes, format=%s) by user:%s", key, len(value), format, username)
+	log.Printf("[INFO] create %q (%d bytes, format=%s) by %s", key, len(value), format, h.getIdentityForLog(r))
 
 	// commit to git if enabled
 	if h.git != nil {
@@ -454,7 +456,7 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[INFO] update %q (%d bytes, format=%s) by user:%s", key, len(value), format, username)
+	log.Printf("[INFO] update %q (%d bytes, format=%s) by %s", key, len(value), format, h.getIdentityForLog(r))
 
 	// commit to git if enabled
 	if h.git != nil {
@@ -488,7 +490,7 @@ func (h *Handler) handleKeyDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[INFO] delete %q by user:%s", key, username)
+	log.Printf("[INFO] delete %q by %s", key, h.getIdentityForLog(r))
 
 	// delete from git if enabled
 	if h.git != nil {
@@ -636,14 +638,14 @@ func (h *Handler) handleKeyRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[INFO] restore %q to revision %s by user:%s", key, rev, username)
+	log.Printf("[INFO] restore %q to revision %s by %s", key, rev, h.getIdentityForLog(r))
 
 	// commit to git
 	req := git.CommitRequest{Key: key, Value: value, Operation: "restore", Format: format, Author: h.getAuthor(username)}
 	if err := h.git.Commit(req); err != nil {
 		log.Printf("[WARN] git commit failed for %s: %v", key, err)
 	}
-	
+
 	h.handleKeyList(w, r) // return updated keys table
 }
 
