@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.2] - 2025-12-07
+
+### Fixed
+- Git store concurrency protection with mutex and improved error handling (#30)
+
 ## [0.13.1] - 2025-12-07
 
 ### Fixed
