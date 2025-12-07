@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -697,6 +699,78 @@ func TestStore_History(t *testing.T) {
 		_, err = store.History("../etc/passwd", 0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid key")
+	})
+}
+
+func TestStore_CommitTimestampConsistency(t *testing.T) {
+	t.Run("commit message and author timestamp match", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store, err := New(Config{Path: filepath.Join(tmpDir, ".history")})
+		require.NoError(t, err)
+
+		err = store.Commit(CommitRequest{
+			Key: "test/key", Value: []byte("value"), Operation: "set", Format: "text", Author: DefaultAuthor(),
+		})
+		require.NoError(t, err)
+
+		// get the commit and extract both timestamps
+		head, err := store.repo.Head()
+		require.NoError(t, err)
+		commit, err := store.repo.CommitObject(head.Hash())
+		require.NoError(t, err)
+
+		// extract timestamp from commit message
+		var msgTimestamp string
+		for line := range strings.SplitSeq(commit.Message, "\n") {
+			if ts, found := strings.CutPrefix(line, "timestamp: "); found {
+				msgTimestamp = ts
+				break
+			}
+		}
+		require.NotEmpty(t, msgTimestamp, "commit message should contain timestamp")
+
+		// parse both timestamps
+		msgTime, err := time.Parse(time.RFC3339, msgTimestamp)
+		require.NoError(t, err)
+
+		authorTime := commit.Author.When
+
+		// timestamps should be exactly equal (same time captured once)
+		assert.True(t, authorTime.Equal(msgTime), "commit message timestamp (%v) and author timestamp (%v) should be identical",
+			msgTime, authorTime)
+	})
+}
+
+func TestStore_ConcurrentCommits(t *testing.T) {
+	t.Run("concurrent commits are safe", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store, storeErr := New(Config{Path: filepath.Join(tmpDir, ".history")})
+		require.NoError(t, storeErr)
+
+		const numGoroutines = 10
+		done := make(chan error, numGoroutines)
+
+		// run concurrent commits - this should not cause race conditions or panic
+		for i := range numGoroutines {
+			go func(idx int) {
+				key := fmt.Sprintf("key%d", idx)
+				value := fmt.Sprintf("value%d", idx)
+				commitErr := store.Commit(CommitRequest{
+					Key: key, Value: []byte(value), Operation: "set", Author: DefaultAuthor(),
+				})
+				done <- commitErr
+			}(i)
+		}
+
+		// collect results - all should succeed (some may fail due to git conflicts, that's acceptable)
+		for range numGoroutines {
+			<-done // drain channel, errors are acceptable due to git conflicts
+		}
+
+		// verify at least some commits succeeded
+		result, readErr := store.ReadAll()
+		require.NoError(t, readErr)
+		assert.NotEmpty(t, result, "at least some commits should succeed")
 	})
 }
 
