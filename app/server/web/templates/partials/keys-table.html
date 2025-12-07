@@ -15,13 +15,14 @@
             <span>Updated: {{.UpdatedAt | formatTime}}</span>
         </div>
         {{if .CanWrite}}
-        <div class="key-card-actions" onclick="event.stopPropagation()">
+        <div class="key-card-actions">
             <button class="btn btn-edit btn-small"
+                    onclick="event.stopPropagation()"
                     hx-get="{{$.BaseURL}}/web/keys/edit/{{.Key | urlEncode}}"
                     hx-target="#modal-content"
                     hx-swap="innerHTML">Edit</button>
             <button class="btn btn-danger btn-small"
-                    onclick="showConfirmDelete('{{.Key | js}}', '{{$.BaseURL}}/web/keys/{{.Key | urlEncode}}')">Delete</button>
+                    onclick="event.stopPropagation(); showConfirmDelete('{{.Key | js}}', '{{$.BaseURL}}/web/keys/{{.Key | urlEncode}}')">Delete</button>
         </div>
         {{end}}
     </div>
