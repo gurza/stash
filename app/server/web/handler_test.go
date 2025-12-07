@@ -16,25 +16,6 @@ import (
 	"github.com/umputun/stash/app/store"
 )
 
-func TestSortModeLabel(t *testing.T) {
-	tests := []struct {
-		mode     enum.SortMode
-		expected string
-	}{
-		{mode: enum.SortModeUpdated, expected: "Updated"},
-		{mode: enum.SortModeKey, expected: "Key"},
-		{mode: enum.SortModeSize, expected: "Size"},
-		{mode: enum.SortModeCreated, expected: "Created"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.mode.String(), func(t *testing.T) {
-			result := sortModeLabel(tc.mode)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 func TestHandler_GetTheme(t *testing.T) {
 	h := newTestHandler(t)
 

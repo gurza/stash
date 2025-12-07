@@ -26,7 +26,6 @@ import (
 //go:generate go run internal/schema/main.go schema.json
 //go:generate moq -out mocks/sessionstore.go -pkg mocks -skip-ensure -fmt goimports . SessionStore
 
-// defaultSessionCleanupInterval is the default interval for background cleanup of expired sessions.
 const defaultSessionCleanupInterval = 1 * time.Hour
 
 // AuthConfig represents the auth configuration file (stash-auth.yml).
@@ -94,7 +93,6 @@ type TokenACL struct {
 }
 
 // SessionStore is the interface for persistent session storage.
-// Defined consumer-side per Go idiom.
 type SessionStore interface {
 	CreateSession(ctx context.Context, token, username string, expiresAt time.Time) error
 	GetSession(ctx context.Context, token string) (username string, expiresAt time.Time, err error)
@@ -192,8 +190,7 @@ func parseUsers(configs []UserConfig) (map[string]User, error) {
 	return users, nil
 }
 
-// parseTokenConfigs converts TokenConfig slice to tokens map and extracts public ACL.
-// Returns (tokens map, public ACL or nil, error).
+// parseTokenConfigs converts TokenConfig slice to tokens map and extracts public ACL
 func parseTokenConfigs(configs []TokenConfig) (map[string]TokenACL, *TokenACL, error) {
 	tokens := make(map[string]TokenACL)
 	var publicACL *TokenACL
@@ -327,7 +324,6 @@ func (a *Auth) Reload(ctx context.Context) error {
 		return errors.New("auth config must have at least one user or token")
 	}
 
-	// acquire write lock for config
 	a.mu.Lock()
 	a.users = users
 	a.tokens = tokens
@@ -465,7 +461,6 @@ func (a *Auth) ValidateUser(username, password string) *User {
 	}
 	a.mu.RUnlock()
 
-	// always run bcrypt comparison to prevent timing-based username enumeration
 	if err := bcrypt.CompareHashAndPassword([]byte(hashToCheck), []byte(password)); err != nil || !exists {
 		return nil
 	}
@@ -473,7 +468,6 @@ func (a *Auth) ValidateUser(username, password string) *User {
 }
 
 // IsValidUser checks if username/password are valid credentials.
-// This is the interface-friendly version of ValidateUser.
 func (a *Auth) IsValidUser(username, password string) bool {
 	return a.ValidateUser(username, password) != nil
 }

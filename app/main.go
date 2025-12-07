@@ -173,7 +173,6 @@ func runServer(ctx context.Context) error {
 		gitService = git.NewService(gitStore, opts.Git.Push)
 	}
 
-	// initialize and start HTTP server
 	srv, err := server.New(kvStore, validator.NewService(), gitService, rawStore, server.Config{
 		Address:          opts.Server.Address,
 		ReadTimeout:      opts.Server.ReadTimeout,
@@ -195,8 +194,7 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize server: %w", err)
 	}
 
-	// set up SIGHUP handler for auth config reload
-	sighupHandler(ctx, srv.AuthReload)
+	sighupHandler(ctx, srv.AuthReload) // set up SIGHUP handler for auth config reload
 
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("server failed: %w", err)
@@ -208,7 +206,6 @@ func runRestore(ctx context.Context) error {
 	log.Printf("[INFO] restoring from revision %s", opts.RestoreCmd.Rev)
 	log.Printf("[INFO] git path: %s, db: %s", opts.Git.Path, opts.DB)
 
-	// initialize git store
 	gitStore, err := git.New(git.Config{
 		Path:   opts.Git.Path,
 		Branch: opts.Git.Branch,
@@ -292,6 +289,7 @@ func setupLogs(debug bool) {
 	}
 }
 
+// signals handles SIGQUIT, SIGTERM and SIGINT signals and calls cancel on context
 func signals(cancel context.CancelFunc) {
 	sigChan := make(chan os.Signal, 1)
 	go func() {
@@ -309,6 +307,7 @@ func signals(cancel context.CancelFunc) {
 	signal.Notify(sigChan, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 }
 
+// sighupHandler sets up a SIGHUP handler that calls reload func on context
 func sighupHandler(ctx context.Context, reload func(context.Context) error) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGHUP)

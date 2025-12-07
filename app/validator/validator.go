@@ -14,10 +14,9 @@ import (
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
-)
 
-// supportedFormats lists all supported value formats.
-var supportedFormats = []string{"text", "json", "yaml", "xml", "toml", "ini", "hcl", "shell"}
+	"github.com/umputun/stash/app/enum"
+)
 
 // Service provides format validation for known data formats.
 type Service struct{}
@@ -29,12 +28,12 @@ func NewService() *Service {
 
 // SupportedFormats returns the list of supported formats.
 func (s *Service) SupportedFormats() []string {
-	return supportedFormats
+	return enum.FormatNames
 }
 
 // IsValidFormat checks if format is in the list of supported formats.
 func (s *Service) IsValidFormat(format string) bool {
-	return slices.Contains(supportedFormats, format)
+	return slices.Contains(enum.FormatNames, format)
 }
 
 // Validate checks if value is valid for the given format.
@@ -43,17 +42,17 @@ func (s *Service) IsValidFormat(format string) bool {
 // Note: YAML is extremely permissive - almost any text parses as a valid string scalar.
 func (s *Service) Validate(format string, value []byte) error {
 	switch format {
-	case "json":
+	case enum.FormatJSON.String():
 		return s.validateJSON(value)
-	case "yaml":
+	case enum.FormatYAML.String():
 		return s.validateYAML(value)
-	case "xml":
+	case enum.FormatXML.String():
 		return s.validateXML(value)
-	case "toml":
+	case enum.FormatTOML.String():
 		return s.validateTOML(value)
-	case "ini":
+	case enum.FormatINI.String():
 		return s.validateINI(value)
-	case "hcl":
+	case enum.FormatHCL.String():
 		return s.validateHCL(value)
 	default:
 		// text, shell, unknown formats - no validation

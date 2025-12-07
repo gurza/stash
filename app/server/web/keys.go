@@ -17,82 +17,6 @@ import (
 	"github.com/umputun/stash/app/store"
 )
 
-// validationErrorParams holds parameters for rendering a validation error form.
-type validationErrorParams struct {
-	Key       string
-	Value     string
-	Format    string
-	IsBinary  bool
-	Username  string
-	Error     string
-	UpdatedAt int64 // original timestamp from form (preserve for conflict detection on retry)
-}
-
-// renderValidationError re-renders the form with a validation error message.
-// preserves original updated_at timestamp for conflict detection on retry.
-func (h *Handler) renderValidationError(w http.ResponseWriter, p validationErrorParams) {
-	w.Header().Set("HX-Retarget", "#modal-content")
-	w.Header().Set("HX-Reswap", "innerHTML")
-	modalWidth, textareaHeight := h.calculateModalDimensions(p.Value)
-	data := templateData{
-		Key:            p.Key,
-		Value:          p.Value,
-		Format:         p.Format,
-		Formats:        h.validator.SupportedFormats(),
-		IsBinary:       p.IsBinary,
-		IsNew:          false,
-		Error:          p.Error,
-		CanForce:       true,
-		BaseURL:        h.baseURL,
-		ModalWidth:     modalWidth,
-		TextareaHeight: textareaHeight,
-		CanWrite:       true,
-		Username:       p.Username,
-		UpdatedAt:      p.UpdatedAt,
-	}
-	if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
-		log.Printf("[ERROR] failed to execute template: %v", err)
-	}
-}
-
-// calculateModalDimensions estimates modal width and textarea height based on content.
-// returns width and textarea height in pixels.
-func (h *Handler) calculateModalDimensions(value string) (width, textareaHeight int) {
-	const minWidth, maxWidth = 600, 1200
-	const charWidth = 8        // approximate width in pixels for monospace 13px font
-	const padding = 100        // approximate padding, margins, and scrollbar
-	const lineHeight = 20      // approximate line height in pixels
-	const minLines = 4         // minimum 4 lines for textarea/value display
-	const maxLines = 18        // maximum lines before scrolling (fits within 400px max-height)
-	const textareaPadding = 24 // textarea padding (12px top + 12px bottom)
-
-	// find longest line and count lines
-	lines := strings.Split(value, "\n")
-	maxLen := 0
-	for _, line := range lines {
-		if runeLen := utf8.RuneCountInString(line); runeLen > maxLen {
-			maxLen = runeLen
-		}
-	}
-	lineCount := len(lines)
-
-	// calculate width with constraints
-	width = maxLen*charWidth + padding
-	width = max(width, minWidth)
-	width = min(width, maxWidth)
-
-	// calculate textarea height based on line count (min 4, max 18 lines)
-	if lineCount < minLines {
-		lineCount = minLines
-	}
-	if lineCount > maxLines {
-		lineCount = maxLines
-	}
-	textareaHeight = lineCount*lineHeight + textareaPadding
-
-	return width, textareaHeight
-}
-
 // handleKeyList renders the keys table partial (for HTMX).
 func (h *Handler) handleKeyList(w http.ResponseWriter, r *http.Request) {
 	keys, err := h.store.List(r.Context())
@@ -420,8 +344,7 @@ func (h *Handler) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// return updated keys table
-	h.handleKeyList(w, r)
+	h.handleKeyList(w, r) // return updated keys table
 }
 
 // handleKeyUpdate updates an existing key.
@@ -541,8 +464,7 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// return updated keys table
-	h.handleKeyList(w, r)
+	h.handleKeyList(w, r) // return updated keys table
 }
 
 // handleKeyDelete deletes a key.
@@ -575,8 +497,7 @@ func (h *Handler) handleKeyDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// return updated keys table
-	h.handleKeyList(w, r)
+	h.handleKeyList(w, r) // return updated keys table
 }
 
 // handleKeyHistory renders the history modal for a key.
@@ -722,7 +643,82 @@ func (h *Handler) handleKeyRestore(w http.ResponseWriter, r *http.Request) {
 	if err := h.git.Commit(req); err != nil {
 		log.Printf("[WARN] git commit failed for %s: %v", key, err)
 	}
+	
+	h.handleKeyList(w, r) // return updated keys table
+}
 
-	// return updated keys table
-	h.handleKeyList(w, r)
+// calculateModalDimensions estimates modal width and textarea height based on content.
+// returns width and textarea height in pixels.
+func (h *Handler) calculateModalDimensions(value string) (width, textareaHeight int) {
+	const minWidth, maxWidth = 600, 1200
+	const charWidth = 8        // approximate width in pixels for monospace 13px font
+	const padding = 100        // approximate padding, margins, and scrollbar
+	const lineHeight = 20      // approximate line height in pixels
+	const minLines = 4         // minimum 4 lines for textarea/value display
+	const maxLines = 18        // maximum lines before scrolling (fits within 400px max-height)
+	const textareaPadding = 24 // textarea padding (12px top + 12px bottom)
+
+	// find longest line and count lines
+	lines := strings.Split(value, "\n")
+	maxLen := 0
+	for _, line := range lines {
+		if runeLen := utf8.RuneCountInString(line); runeLen > maxLen {
+			maxLen = runeLen
+		}
+	}
+	lineCount := len(lines)
+
+	// calculate width with constraints
+	width = maxLen*charWidth + padding
+	width = max(width, minWidth)
+	width = min(width, maxWidth)
+
+	// calculate textarea height based on line count (min 4, max 18 lines)
+	if lineCount < minLines {
+		lineCount = minLines
+	}
+	if lineCount > maxLines {
+		lineCount = maxLines
+	}
+	textareaHeight = lineCount*lineHeight + textareaPadding
+
+	return width, textareaHeight
+}
+
+// validationErrorParams holds parameters for rendering a validation error form.
+type validationErrorParams struct {
+	Key       string
+	Value     string
+	Format    string
+	IsBinary  bool
+	Username  string
+	Error     string
+	UpdatedAt int64 // original timestamp from form (preserve for conflict detection on retry)
+}
+
+// renderValidationError re-renders the form with a validation error message.
+// preserves original updated_at timestamp for conflict detection on retry.
+func (h *Handler) renderValidationError(w http.ResponseWriter, p validationErrorParams) {
+	w.Header().Set("HX-Retarget", "#modal-content")
+	w.Header().Set("HX-Reswap", "innerHTML")
+	modalWidth, textareaHeight := h.calculateModalDimensions(p.Value)
+	data := templateData{
+		Key:            p.Key,
+		Value:          p.Value,
+		Format:         p.Format,
+		Formats:        h.validator.SupportedFormats(),
+		IsBinary:       p.IsBinary,
+		IsNew:          false,
+		Error:          p.Error,
+		CanForce:       true,
+		BaseURL:        h.baseURL,
+		ModalWidth:     modalWidth,
+		TextareaHeight: textareaHeight,
+		CanWrite:       true,
+		Username:       p.Username,
+		UpdatedAt:      p.UpdatedAt,
+	}
+	if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
+		log.Printf("[ERROR] failed to execute template: %v", err)
+	}
 }

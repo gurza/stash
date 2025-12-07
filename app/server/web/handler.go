@@ -68,7 +68,7 @@ type AuthProvider interface {
 	FilterUserKeys(username string, keys []string) []string
 	CheckUserPermission(username, key string, write bool) bool
 	UserCanWrite(username string) bool
-	// login methods
+
 	IsValidUser(username, password string) bool
 	CreateSession(ctx context.Context, username string) (string, error)
 	InvalidateSession(ctx context.Context, token string)
@@ -151,6 +151,12 @@ func (h *Handler) RegisterLogin(r *routegroup.Bundle, middleware func(http.Handl
 
 // templateFuncs returns custom template functions.
 func templateFuncs() template.FuncMap {
+	// sortModeLabel returns a human-readable label for the sort mode.
+	sortModeLabel := func(mode enum.SortMode) string {
+		s := mode.String()
+		return strings.ToUpper(s[:1]) + s[1:]
+	}
+
 	return template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04")
@@ -268,12 +274,6 @@ type templateData struct {
 	GitEnabled bool               // git integration enabled
 	History    []git.HistoryEntry // commit history entries
 	RevHash    string             // specific revision hash being viewed
-}
-
-// sortModeLabel returns a human-readable label for the sort mode.
-func sortModeLabel(mode enum.SortMode) string {
-	s := mode.String()
-	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // getTheme returns the current theme from cookie, defaulting to system.

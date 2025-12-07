@@ -85,8 +85,7 @@ func (h *Handler) Register(r *routegroup.Bundle) {
 }
 
 // handleList returns all keys the caller has read access to.
-// GET /kv
-// Optional query params: ?prefix=app/config (filter by prefix)
+// GET /kv?prefix=app/config (filter by prefix)
 func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	keys, err := h.store.List(r.Context())
 	if err != nil {
@@ -201,7 +200,7 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// formatToContentType maps storage format to HTTP Content-Type.
+// formatToContentType maps storage format to HTTP Content-Type
 func (h *Handler) formatToContentType(format string) string {
 	if f, err := enum.ParseFormat(format); err == nil {
 		return f.ContentType()
@@ -211,7 +210,7 @@ func (h *Handler) formatToContentType(format string) string {
 
 // handleSet stores a value for a key.
 // PUT /kv/{key...}
-// Accepts format via X-Stash-Format header or ?format= query param (defaults to "text").
+// accepts format via X-Stash-Format header or ?format= query param (defaults to "text")
 func (h *Handler) handleSet(w http.ResponseWriter, r *http.Request) {
 	key := store.NormalizeKey(r.PathValue("key"))
 	if key == "" {

@@ -38,7 +38,6 @@ type Server struct {
 }
 
 // KVStore defines the interface for key-value storage operations.
-// Defined here (consumer side) to allow different store implementations.
 type KVStore interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	GetWithFormat(ctx context.Context, key string) ([]byte, string, error)
@@ -50,7 +49,6 @@ type KVStore interface {
 }
 
 // GitService defines the interface for git operations.
-// Defined here (consumer side) to allow different implementations.
 type GitService interface {
 	Commit(req git.CommitRequest) error
 	Delete(key string, author git.Author) error
@@ -59,7 +57,6 @@ type GitService interface {
 }
 
 // Validator defines the interface for format validation.
-// Defined here (consumer side) to allow different validator implementations.
 type Validator interface {
 	Validate(format string, value []byte) error
 	IsValidFormat(format string) bool
@@ -80,7 +77,6 @@ type Config struct {
 	BaseURL         string        // base URL path for reverse proxy (e.g., /stash)
 	PageSize        int           // keys per page in web UI (0 = unlimited)
 
-	// limits
 	BodySizeLimit    int64   // max request body size in bytes
 	RequestsPerSec   float64 // max requests per second (rate limit)
 	MaxConcurrent    int64   // max concurrent in-flight requests
@@ -89,7 +85,6 @@ type Config struct {
 
 // New creates a new Server instance.
 // gs is optional git service, pass nil to disable git versioning.
-// ss is the session store for persistent sessions.
 func New(st KVStore, val Validator, gs GitService, ss SessionStore, cfg Config) (*Server, error) {
 	auth, err := NewAuth(cfg.AuthFile, cfg.LoginTTL, ss)
 	if err != nil {
@@ -243,7 +238,7 @@ func (s *Server) bodySizeLimit() int64 {
 	if s.cfg.BodySizeLimit > 0 {
 		return s.cfg.BodySizeLimit
 	}
-	return 1024 * 1024 // 1MB default
+	return 1024 * 1024
 }
 
 // requestsPerSec returns the configured rate limit (requests per second), or default 100 if not set.
@@ -251,7 +246,7 @@ func (s *Server) requestsPerSec() float64 {
 	if s.cfg.RequestsPerSec > 0 {
 		return s.cfg.RequestsPerSec
 	}
-	return 100 // default
+	return 100
 }
 
 // maxConcurrent returns the configured max concurrent in-flight requests, or default 1000 if not set.
@@ -259,7 +254,7 @@ func (s *Server) maxConcurrent() int64 {
 	if s.cfg.MaxConcurrent > 0 {
 		return s.cfg.MaxConcurrent
 	}
-	return 1000 // default
+	return 1000
 }
 
 // loginConcurrency returns the configured login concurrency limit, or default 5 if not set.
@@ -267,7 +262,7 @@ func (s *Server) loginConcurrency() int64 {
 	if s.cfg.LoginConcurrency > 0 {
 		return s.cfg.LoginConcurrency
 	}
-	return 5 // default
+	return 5
 }
 
 // rateLimiter returns middleware that limits requests per second using tollbooth.
