@@ -23,11 +23,11 @@
     </div>
 </div>
 <div class="modal-footer">
-    <button class="btn btn-secondary" onclick="hideModal('main-modal')">Close</button>
-    <button class="btn btn-secondary"
+    <button class="btn btn-secondary modal-footer-left"
             hx-get="{{.BaseURL}}/web/keys/history/{{.Key | urlEncode}}"
             hx-target="#modal-content"
-            hx-swap="innerHTML">Back to History</button>
+            hx-swap="innerHTML"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Back to History</button>
+    <button class="btn btn-secondary" onclick="hideModal('main-modal')">Close</button>
     {{if .CanWrite}}
     <button class="btn btn-primary"
             hx-post="{{.BaseURL}}/web/keys/restore/{{.Key | urlEncode}}"

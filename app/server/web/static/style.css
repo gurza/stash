@@ -414,6 +414,14 @@ tr.clickable-row {
     border-top: 1px solid var(--color-border);
 }
 
+.modal-footer-left {
+    margin-right: auto;
+}
+
+.btn svg {
+    flex-shrink: 0;
+}
+
 /* Form */
 .form-group {
     margin-bottom: 16px;

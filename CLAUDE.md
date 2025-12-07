@@ -71,6 +71,24 @@ docker run --rm -v $(pwd):/workdir jetbrains/intellij-http-client \
   -e local -E http-client.env.json requests.http
 ```
 
+**Background server for Playwright/browser testing**:
+```bash
+# build first
+make build
+
+# start server in background (separate command, not chained with &&)
+./stash server --dbg --server.address=:18080 --db=/tmp/stash-test.db &
+
+# with git enabled
+./stash server --dbg --server.address=:18080 --db=/tmp/stash-test.db --git.enabled --git.path=/tmp/stash-git &
+
+# verify running (run after server start)
+sleep 2; curl -s http://localhost:18080/ping
+
+# cleanup after testing
+pkill -f "stash server.*18080"; rm -f /tmp/stash-test.db
+```
+
 ## API
 
 ```
