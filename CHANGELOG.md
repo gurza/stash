@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.13.4] - 2025-12-10
+
+### Fixed
+- Improved audit logging with identity helper for user/anonymous tracking
+
+### Changed
+- CI: Added explicit permissions blocks and security hardening (#34)
+- CI: Created dedicated Docker workflow with dual registry support (ghcr.io + Docker Hub)
+- CI: Migrated to native GitHub ARM64 runners for multi-arch builds
+- Dependencies: Updated GitHub Actions (checkout v6, upload-artifact v5, download-artifact v6)
+
 ## [0.13.3] - 2025-12-07
 
 ### Fixed
