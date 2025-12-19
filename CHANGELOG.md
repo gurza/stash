@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.0] - 2025-12-18
+
+### Added
+- Go SDK client library for programmatic access (#41)
+  - Functional options pattern (WithToken, WithTimeout, WithRetry, WithHTTPClient)
+  - String-based API: Get, GetOrDefault, GetBytes, Set, SetWithFormat
+  - Type-safe Format enum with validation
+  - Sentinel errors (ErrNotFound, ErrUnauthorized, ErrForbidden)
+  - Automatic retries with configurable delay
+
+### Changed
+- Dependencies: bump golang.org/x/crypto, actions/upload-artifact, actions/download-artifact
+
+### Fixed
+- CI: move checkout before setup-go (#35, #39)
+
 ## [0.13.4] - 2025-12-10
 
 ### Fixed
