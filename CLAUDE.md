@@ -169,7 +169,7 @@ POST   /logout                   # clear session, redirect to login
 
 ## E2E Testing
 
-- **Location**: `app/e2e/e2e_test.go` with fixtures in `app/e2e/fixtures/`
+- **Location**: `e2e/e2e_test.go` with test data in `e2e/testdata/`
 - **Technology**: playwright-go (Go bindings for Playwright, no npm/TypeScript)
 - **Build tag**: `//go:build e2e` - excluded from regular `go test ./...`
 - **Commands**:

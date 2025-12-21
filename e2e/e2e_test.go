@@ -20,7 +20,7 @@ const (
 	baseURL     = "http://localhost:18080"
 	testDBPath  = "/tmp/stash-e2e-pw.db"
 	testGitPath = "/tmp/stash-e2e-pw-git"
-	authFile    = "app/e2e/fixtures/auth.yml"
+	authFile    = "e2e/testdata/auth.yml"
 )
 
 var (
@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 
 	// build the binary
 	build := exec.Command("go", "build", "-o", "/tmp/stash-e2e", "./app")
-	build.Dir = "../.."
+	build.Dir = ".."
 	if out, err := build.CombinedOutput(); err != nil {
 		log.Fatalf("failed to build: %v\n%s", err, out)
 	}
@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 		"--git.enabled",
 		"--git.path="+testGitPath,
 	)
-	serverCmd.Dir = "../.."
+	serverCmd.Dir = ".."
 	if err := serverCmd.Start(); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
