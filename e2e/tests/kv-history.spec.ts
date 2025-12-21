@@ -42,6 +42,8 @@ test.describe('kv history (git mode)', () => {
     await page.click('#modal-content button[type="submit"]');
     await expect(page.locator('#main-modal.active')).not.toBeVisible({ timeout: 5000 });
     await page.waitForLoadState('networkidle');
+    // small delay to let HTMX process new table elements
+    await page.waitForTimeout(100);
   }
 
   // helper to force close any open modal via JavaScript
@@ -87,13 +89,16 @@ test.describe('kv history (git mode)', () => {
     await expect(keyCell).toBeVisible();
     await keyCell.click();
     await expect(page.locator('#main-modal.active')).toBeVisible();
+    // wait for modal content to be fully loaded and HTMX to attach event handlers
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(100);
 
     // find and click history button
     const historyBtn = page.locator('button:has-text("History")');
     await expect(historyBtn).toBeVisible();
     await historyBtn.click();
-    // wait for HTMX to load history content
-    await page.waitForLoadState('networkidle');
+    // wait for HTMX to swap in history content - the modal header changes to "History: {key}"
+    await expect(page.locator('h2:has-text("History:")')).toBeVisible({ timeout: 10000 });
 
     // should see history table
     await expect(page.locator('.history-table')).toBeVisible();
@@ -112,12 +117,16 @@ test.describe('kv history (git mode)', () => {
     await expect(keyCell).toBeVisible();
     await keyCell.click();
     await expect(page.locator('#main-modal.active')).toBeVisible();
+    // wait for modal content to be fully loaded and HTMX to attach event handlers
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(100);
 
     // click history button
     const historyBtn = page.locator('button:has-text("History")');
     await expect(historyBtn).toBeVisible();
     await historyBtn.click();
-    await page.waitForLoadState('networkidle');
+    // wait for HTMX to swap in history content - the modal header changes to "History: {key}"
+    await expect(page.locator('h2:has-text("History:")')).toBeVisible({ timeout: 10000 });
 
     // history table should be visible with revisions
     await expect(page.locator('.history-table')).toBeVisible();
@@ -147,12 +156,16 @@ test.describe('kv history (git mode)', () => {
     await expect(keyCell1).toBeVisible();
     await keyCell1.click();
     await expect(page.locator('#main-modal.active')).toBeVisible();
+    // wait for modal content to be fully loaded and HTMX to attach event handlers
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(100);
 
     // click history button
     const historyBtn = page.locator('button:has-text("History")');
     await expect(historyBtn).toBeVisible();
     await historyBtn.click();
-    await page.waitForLoadState('networkidle');
+    // wait for HTMX to swap in history content - the modal header changes to "History: {key}"
+    await expect(page.locator('h2:has-text("History:")')).toBeVisible({ timeout: 10000 });
 
     // find restore button for original revision (oldest commit is last in list)
     const restoreBtn = page.locator('button:has-text("Restore")').last();

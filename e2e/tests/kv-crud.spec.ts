@@ -20,6 +20,8 @@ test.describe('kv crud operations', () => {
     await expect(page.locator(`td.key-cell:has-text("${key}")`)).toBeVisible();
     // wait for HTMX to finish processing the new table content
     await page.waitForLoadState('networkidle');
+    // small delay to let HTMX process new elements
+    await page.waitForTimeout(100);
   }
 
   // helper to force close any open modal via JavaScript
@@ -90,12 +92,15 @@ test.describe('kv crud operations', () => {
     await valueInput.fill(updatedValue);
     await page.click('#modal-content button[type="submit"]');
     await expect(page.locator('#main-modal.active')).not.toBeVisible({ timeout: 5000 });
+    await page.waitForLoadState('networkidle');
+    // small delay to let HTMX process new elements after table swap
+    await page.waitForTimeout(100);
 
     // verify updated value - wait for cell to be stable first
     const viewCell = page.locator(`tr:has-text("${keyName}") td.key-cell`);
     await expect(viewCell).toBeVisible();
     await viewCell.click();
-    await expect(page.locator('#main-modal.active')).toBeVisible();
+    await expect(page.locator('#main-modal.active')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.value-display').last()).toContainText(updatedValue);
   });
 

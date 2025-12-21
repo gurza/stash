@@ -28,6 +28,8 @@ test.describe('permissions', () => {
     await expect(page.locator('#main-modal.active')).not.toBeVisible({ timeout: 5000 });
     await expect(page.locator(`td.key-cell:has-text("${key}")`)).toBeVisible();
     await page.waitForLoadState('networkidle');
+    // small delay to let HTMX process new elements
+    await page.waitForTimeout(100);
   }
 
   // helper to cleanup keys with a prefix
