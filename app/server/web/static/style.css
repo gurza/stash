@@ -286,6 +286,13 @@ tr.clickable-row {
     color: var(--color-text);
 }
 
+.lock-icon {
+    vertical-align: -2px;
+    margin-left: 6px;
+    color: var(--color-accent);
+    flex-shrink: 0;
+}
+
 .size-cell, .date-cell {
     white-space: nowrap;
     color: var(--color-text-muted);
@@ -657,6 +664,32 @@ tr.clickable-row {
 }
 
 .sort-button svg {
+    flex-shrink: 0;
+}
+
+.filter-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    min-height: 38px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text);
+    box-sizing: border-box;
+}
+
+.filter-button:hover {
+    background: var(--color-surface-hover);
+    border-color: var(--color-primary);
+}
+
+.filter-button svg {
     flex-shrink: 0;
 }
 

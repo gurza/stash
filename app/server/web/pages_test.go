@@ -9,15 +9,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/umputun/stash/app/enum"
 	"github.com/umputun/stash/app/server/web/mocks"
 	"github.com/umputun/stash/app/store"
 )
 
 func TestHandler_HandleIndex(t *testing.T) {
 	st := &mocks.KVStoreMock{
-		ListFunc: func(context.Context) ([]store.KeyInfo, error) {
+		ListFunc: func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) {
 			return []store.KeyInfo{{Key: "test", Size: 100}}, nil
 		},
+		SecretsEnabledFunc: func() bool { return false },
 	}
 	h := newTestHandlerWithStore(t, st)
 
@@ -32,9 +34,10 @@ func TestHandler_HandleIndex(t *testing.T) {
 
 func TestHandler_HandleIndex_StoreError(t *testing.T) {
 	st := &mocks.KVStoreMock{
-		ListFunc: func(context.Context) ([]store.KeyInfo, error) {
+		ListFunc: func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) {
 			return nil, assert.AnError
 		},
+		SecretsEnabledFunc: func() bool { return false },
 	}
 	h := newTestHandlerWithStore(t, st)
 
@@ -51,7 +54,8 @@ func TestHandler_HandleIndex_WithPagination(t *testing.T) {
 		keys[i] = store.KeyInfo{Key: "key" + string(rune('a'+i)), Size: 100}
 	}
 	st := &mocks.KVStoreMock{
-		ListFunc: func(context.Context) ([]store.KeyInfo, error) { return keys, nil },
+		ListFunc:           func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) { return keys, nil },
+		SecretsEnabledFunc: func() bool { return false },
 	}
 	auth := &mocks.AuthProviderMock{
 		EnabledFunc:             func() bool { return false },
@@ -86,7 +90,8 @@ func TestHandler_HandleIndex_WithPagination(t *testing.T) {
 
 func TestHandler_HandleThemeToggle(t *testing.T) {
 	st := &mocks.KVStoreMock{
-		ListFunc: func(context.Context) ([]store.KeyInfo, error) { return nil, nil },
+		ListFunc:           func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) { return nil, nil },
+		SecretsEnabledFunc: func() bool { return false },
 	}
 	h := newTestHandlerWithStore(t, st)
 
@@ -125,7 +130,8 @@ func TestHandler_HandleThemeToggle(t *testing.T) {
 
 func TestHandler_HandleViewModeToggle(t *testing.T) {
 	st := &mocks.KVStoreMock{
-		ListFunc: func(context.Context) ([]store.KeyInfo, error) { return nil, nil },
+		ListFunc:           func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) { return nil, nil },
+		SecretsEnabledFunc: func() bool { return false },
 	}
 	h := newTestHandlerWithStore(t, st)
 
@@ -164,7 +170,8 @@ func TestHandler_HandleViewModeToggle(t *testing.T) {
 
 func TestHandler_HandleSortToggle(t *testing.T) {
 	st := &mocks.KVStoreMock{
-		ListFunc: func(context.Context) ([]store.KeyInfo, error) { return []store.KeyInfo{}, nil },
+		ListFunc:           func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) { return []store.KeyInfo{}, nil },
+		SecretsEnabledFunc: func() bool { return false },
 	}
 	h := newTestHandlerWithStore(t, st)
 
@@ -197,6 +204,47 @@ func TestHandler_HandleSortToggle(t *testing.T) {
 			}
 			require.NotNil(t, sortCookie, "sort_mode cookie should be set")
 			assert.Equal(t, tc.expectedNew, sortCookie.Value)
+		})
+	}
+}
+
+func TestHandler_HandleSecretsFilterToggle(t *testing.T) {
+	st := &mocks.KVStoreMock{
+		ListFunc:           func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) { return nil, nil },
+		SecretsEnabledFunc: func() bool { return true },
+	}
+	h := newTestHandlerWithStore(t, st)
+
+	tests := []struct {
+		name     string
+		current  string
+		expected string
+	}{
+		{name: "all to secrets", current: "all", expected: "secretsonly"},
+		{name: "secrets to keys", current: "secretsonly", expected: "keysonly"},
+		{name: "keys to all", current: "keysonly", expected: "all"},
+		{name: "no cookie to secrets", current: "", expected: "secretsonly"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/web/secrets-filter", http.NoBody)
+			if tc.current != "" {
+				req.AddCookie(&http.Cookie{Name: "secrets_filter", Value: tc.current})
+			}
+			rec := httptest.NewRecorder()
+			h.handleSecretsFilterToggle(rec, req)
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+			var filterCookie *http.Cookie
+			for _, c := range rec.Result().Cookies() {
+				if c.Name == "secrets_filter" {
+					filterCookie = c
+					break
+				}
+			}
+			require.NotNil(t, filterCookie, "secrets_filter cookie should be set")
+			assert.Equal(t, tc.expected, filterCookie.Value)
 		})
 	}
 }

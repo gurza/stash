@@ -51,7 +51,8 @@ type KVStore interface {
 	Set(ctx context.Context, key string, value []byte, format string) error
 	SetWithVersion(ctx context.Context, key string, value []byte, format string, expectedVersion time.Time) error
 	Delete(ctx context.Context, key string) error
-	List(ctx context.Context) ([]store.KeyInfo, error)
+	List(ctx context.Context, filter enum.SecretsFilter) ([]store.KeyInfo, error)
+	SecretsEnabled() bool
 }
 
 // Validator defines the interface for format validation.
@@ -136,6 +137,7 @@ func (h *Handler) Register(r *routegroup.Bundle) {
 	r.HandleFunc("POST /web/theme", h.handleThemeToggle)
 	r.HandleFunc("POST /web/view-mode", h.handleViewModeToggle)
 	r.HandleFunc("POST /web/sort", h.handleSortToggle)
+	r.HandleFunc("POST /web/secrets-filter", h.handleSecretsFilterToggle)
 }
 
 // RegisterAuth registers auth routes (login/logout) on the given router.
@@ -233,8 +235,40 @@ type keyWithPermission struct {
 	CanWrite bool // user has write permission for this specific key
 }
 
+// conflictData holds conflict detection fields for optimistic locking.
+type conflictData struct {
+	UpdatedAt       int64  // unix timestamp when key was loaded (for optimistic locking)
+	Conflict        bool   // true when a conflict was detected on save
+	ServerValue     string // current server value (shown during conflict)
+	ServerFormat    string // current server format (shown during conflict)
+	ServerUpdatedAt int64  // server's updated_at timestamp (for retry after conflict)
+}
+
+// paginationData holds pagination state.
+type paginationData struct {
+	Page       int  // current page (1-based)
+	TotalPages int  // total number of pages
+	TotalKeys  int  // total keys after filtering (before pagination)
+	HasPrev    bool // has previous page
+	HasNext    bool // has next page
+}
+
+// secretsData holds secrets filter state.
+type secretsData struct {
+	SecretsFilter  enum.SecretsFilter // current filter mode (all/secrets/keys)
+	SecretsEnabled bool               // secrets feature enabled
+}
+
+// historyData holds git history state.
+type historyData struct {
+	GitEnabled bool               // git integration enabled
+	History    []git.HistoryEntry // commit history entries
+	RevHash    string             // specific revision hash being viewed
+}
+
 // templateData holds data passed to templates.
 type templateData struct {
+	// key display fields
 	Keys           []keyWithPermission
 	Key            string
 	Value          string
@@ -243,37 +277,32 @@ type templateData struct {
 	Formats        []string      // available format options
 	IsBinary       bool
 	IsNew          bool
-	Theme          enum.Theme
-	ViewMode       enum.ViewMode
-	SortMode       enum.SortMode
-	Search         string
-	Error          string
-	CanForce       bool // allow force submit despite error (for validation errors, not conflicts)
-	AuthEnabled    bool
-	BaseURL        string
+
+	// display settings
+	Theme    enum.Theme
+	ViewMode enum.ViewMode
+	SortMode enum.SortMode
+
+	// form state
+	Search   string
+	Error    string
+	CanForce bool // allow force submit despite error (for validation errors, not conflicts)
+
+	// auth and permissions
+	AuthEnabled bool
+	BaseURL     string
+	CanWrite    bool   // user has write permission (for showing edit controls)
+	Username    string // current logged-in username
+
+	// modal sizing
 	ModalWidth     int
 	TextareaHeight int
-	CanWrite       bool   // user has write permission (for showing edit controls)
-	Username       string // current logged-in username
 
-	// conflict detection fields
-	UpdatedAt       int64  // unix timestamp when key was loaded (for optimistic locking)
-	Conflict        bool   // true when a conflict was detected on save
-	ServerValue     string // current server value (shown during conflict)
-	ServerFormat    string // current server format (shown during conflict)
-	ServerUpdatedAt int64  // server's updated_at timestamp (for retry after conflict)
-
-	// pagination fields
-	Page       int  // current page (1-based)
-	TotalPages int  // total number of pages
-	TotalKeys  int  // total keys after filtering (before pagination)
-	HasPrev    bool // has previous page
-	HasNext    bool // has next page
-
-	// history fields
-	GitEnabled bool               // git integration enabled
-	History    []git.HistoryEntry // commit history entries
-	RevHash    string             // specific revision hash being viewed
+	// embedded groups
+	conflictData
+	paginationData
+	secretsData
+	historyData
 }
 
 // getTheme returns the current theme from cookie, defaulting to system.
@@ -304,6 +333,56 @@ func (h *Handler) getSortMode(r *http.Request) enum.SortMode {
 		}
 	}
 	return enum.SortModeUpdated
+}
+
+// getSecretsFilter returns the current secrets filter from cookie, defaulting to all.
+func (h *Handler) getSecretsFilter(r *http.Request) enum.SecretsFilter {
+	if c, err := r.Cookie("secrets_filter"); err == nil {
+		if filter, err := enum.ParseSecretsFilter(c.Value); err == nil {
+			return filter
+		}
+	}
+	return enum.SecretsFilterAll
+}
+
+// listParams holds view state parameters extracted from cookies and Set-Cookie headers.
+type listParams struct {
+	viewMode      enum.ViewMode
+	sortMode      enum.SortMode
+	secretsFilter enum.SecretsFilter
+}
+
+// getListParams extracts view/sort/filter state, checking Set-Cookie header for just-set values.
+// this is needed when toggle handlers set cookie and then call handleKeyList in same request.
+func (h *Handler) getListParams(w http.ResponseWriter, r *http.Request) listParams {
+	p := listParams{
+		viewMode:      h.getViewMode(r),
+		sortMode:      h.getSortMode(r),
+		secretsFilter: h.getSecretsFilter(r),
+	}
+	for _, c := range w.Header()["Set-Cookie"] {
+		switch {
+		case strings.Contains(c, "view_mode=cards"):
+			p.viewMode = enum.ViewModeCards
+		case strings.Contains(c, "view_mode=grid"):
+			p.viewMode = enum.ViewModeGrid
+		case strings.Contains(c, "sort_mode=key"):
+			p.sortMode = enum.SortModeKey
+		case strings.Contains(c, "sort_mode=size"):
+			p.sortMode = enum.SortModeSize
+		case strings.Contains(c, "sort_mode=created"):
+			p.sortMode = enum.SortModeCreated
+		case strings.Contains(c, "sort_mode=updated"):
+			p.sortMode = enum.SortModeUpdated
+		case strings.Contains(c, "secrets_filter=all"):
+			p.secretsFilter = enum.SecretsFilterAll
+		case strings.Contains(c, "secrets_filter=secretsonly"):
+			p.secretsFilter = enum.SecretsFilterSecretsOnly
+		case strings.Contains(c, "secrets_filter=keysonly"):
+			p.secretsFilter = enum.SecretsFilterKeysOnly
+		}
+	}
+	return p
 }
 
 // url returns a URL path with the base URL prefix.
