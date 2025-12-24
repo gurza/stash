@@ -235,6 +235,17 @@ func deleteKey(t *testing.T, page playwright.Page, key string) {
 	waitHidden(t, row)
 }
 
+// viewKey opens the view modal for a key and returns the modal locator
+func viewKey(t *testing.T, page playwright.Page, key string) playwright.Locator {
+	t.Helper()
+	keyCell := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key))
+	waitVisible(t, keyCell) // ensure element ready after HTMX swap
+	require.NoError(t, keyCell.Click())
+	modal := page.Locator("#main-modal.active")
+	waitVisible(t, modal)
+	return modal
+}
+
 // cleanupKeys removes all keys with given prefix
 func cleanupKeys(t *testing.T, page playwright.Page, prefix string) {
 	t.Helper()
@@ -357,10 +368,7 @@ func TestKV_ViewKey(t *testing.T) {
 	keyValue := "value to view"
 	createKey(t, page, keyName, keyValue)
 
-	// click to view
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
+	modal := viewKey(t, page, keyName)
 	valueContent := page.Locator(".value-content")
 	waitVisible(t, valueContent)
 
@@ -397,8 +405,7 @@ func TestKV_EditKey(t *testing.T) {
 	waitHidden(t, modal)
 
 	// verify by viewing
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	waitVisible(t, modal)
+	modal = viewKey(t, page, keyName)
 	valueContent := page.Locator(".value-content")
 	waitVisible(t, valueContent)
 
@@ -451,10 +458,7 @@ func TestHistory_ShowsCommits(t *testing.T) {
 	updateKey(t, page, keyName, "version 2")
 	updateKey(t, page, keyName, "version 3")
 
-	// view key
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
+	modal := viewKey(t, page, keyName)
 
 	// click history button
 	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
@@ -481,10 +485,7 @@ func TestHistory_ViewSpecificRevision(t *testing.T) {
 	createKey(t, page, keyName, initialValue)
 	updateKey(t, page, keyName, "updated value")
 
-	// view key
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
+	modal := viewKey(t, page, keyName)
 
 	// click history
 	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
@@ -518,10 +519,7 @@ func TestHistory_RestoreRevision(t *testing.T) {
 	createKey(t, page, keyName, originalValue)
 	updateKey(t, page, keyName, "new value")
 
-	// view key
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
+	modal := viewKey(t, page, keyName)
 
 	// click history
 	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
@@ -766,9 +764,7 @@ func TestUI_DarkThemeCRUD(t *testing.T) {
 	createKey(t, page, keyName, keyValue)
 
 	// view key in dark mode
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
+	modal := viewKey(t, page, keyName)
 	valueContent := page.Locator(".value-content")
 	waitVisible(t, valueContent)
 
@@ -785,8 +781,7 @@ func TestUI_DarkThemeCRUD(t *testing.T) {
 	updateKey(t, page, keyName, updatedValue)
 
 	// verify edit worked
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	waitVisible(t, modal)
+	viewKey(t, page, keyName)
 	waitVisible(t, valueContent)
 
 	text, err = valueContent.TextContent()
@@ -871,10 +866,7 @@ func TestUI_SyntaxHighlighting(t *testing.T) {
 	jsonValue := `{"key": "value"}`
 	createKeyWithFormat(t, page, keyName, jsonValue, "json")
 
-	// view key
-	require.NoError(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
+	modal := viewKey(t, page, keyName)
 	highlightedCode := page.Locator(".highlighted-code")
 	waitVisible(t, highlightedCode)
 
