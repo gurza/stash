@@ -457,6 +457,38 @@ Secrets are displayed with a lock icon (🔒) in the key list. Use the filter to
 - **400 Bad Request**: Returned when accessing a secret path but `--secrets.key` is not configured
 - **403 Forbidden**: Returned when user/token lacks explicit secrets permission
 
+<details markdown>
+  <summary>Technical details</summary>
+
+### Encryption
+
+- **Algorithm**: NaCl secretbox (XSalsa20-Poly1305 authenticated encryption)
+- **Key derivation**: Argon2id with 64MB memory, 1 iteration, 4 parallel threads
+- **Per-value salt**: Each encryption uses a unique 16-byte random salt
+- **Nonce**: 24-byte random nonce per encryption
+- **Storage format**: `base64(salt ‖ nonce ‖ ciphertext)`
+
+### Security Properties
+
+**Protected against:**
+- Database file theft (values encrypted at rest)
+- Ciphertext analysis (unique salt/nonce means identical values encrypt differently)
+- Tampering (Poly1305 authentication tag)
+
+**Not protected against:**
+- Memory inspection on running server
+- Master key compromise
+- Authorized users with secrets permissions
+
+### Key Management
+
+The master key (`--secrets.key`) is held in memory during server operation. If compromised, all secrets are exposed. For production:
+- Use a strong, randomly generated key (32+ characters recommended)
+- Rotate keys by re-encrypting all secrets with a new key (requires manual process)
+- Consider environment variable injection from a secrets manager (Vault, AWS Secrets Manager, etc.)
+
+</details>
+
 ## API
 
 ### Get value
