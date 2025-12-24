@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.15.0] - 2025-12-24
+
+### Added
+- Secrets vault with encrypted storage using NaCl secretbox + Argon2id (#45)
+  - Path-based detection (keys with "secrets" as path segment)
+  - Explicit permission grants required (wildcards don't grant secrets access)
+  - Lock icon display in table and card views
+  - Secrets filter toggle (all/secrets/keys)
+- Playwright E2E tests for web UI (#42, #43)
+  - Go-based playwright-go tests with browser reuse
+  - Build tag isolation from regular test runs
+
+### Changed
+- E2E testing infrastructure refactored with proper HTMX waits (#42, #43)
+- Dependencies: bump actions/cache from 4 to 5 (#44)
+
+### Fixed
+- Makefile run target (#40)
+- Secrets error now displays in modal instead of replacing table
+- Flaky e2e tests with proper element waiting
+
 ## [0.14.0] - 2025-12-18
 
 ### Added
