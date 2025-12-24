@@ -173,10 +173,11 @@ func createKey(t *testing.T, page playwright.Page, key, value string) {
 
 	require.NoError(t, page.Locator(`input[name="key"]`).Fill(key))
 	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill(value))
-	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
+	submitBtn := page.Locator(`#modal-content button[type="submit"]`)
+	waitVisible(t, submitBtn)
+	require.NoError(t, submitBtn.Click())
 
-	waitHidden(t, modal)
-	// wait for table to show the new key
+	// wait for table to show the new key (positive signal that HTMX swap completed)
 	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key)))
 }
 
@@ -191,10 +192,11 @@ func createKeyWithFormat(t *testing.T, page playwright.Page, key, value, format 
 	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill(value))
 	_, err := page.Locator(`select[name="format"]`).SelectOption(playwright.SelectOptionValues{Values: &[]string{format}})
 	require.NoError(t, err)
-	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
+	submitBtn := page.Locator(`#modal-content button[type="submit"]`)
+	waitVisible(t, submitBtn)
+	require.NoError(t, submitBtn.Click())
 
-	waitHidden(t, modal)
-	// wait for table to show the new key
+	// wait for table to show the new key (positive signal that HTMX swap completed)
 	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key)))
 }
 
@@ -208,9 +210,16 @@ func updateKey(t *testing.T, page playwright.Page, key, value string) {
 	modal := page.Locator("#main-modal.active")
 	waitVisible(t, modal)
 
-	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill(value))
-	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
-	waitHidden(t, modal)
+	textarea := page.Locator(`textarea[name="value"]`)
+	waitVisible(t, textarea)
+	require.NoError(t, textarea.Fill(value))
+	submitBtn := page.Locator(`#modal-content button[type="submit"]`)
+	waitVisible(t, submitBtn)
+	require.NoError(t, submitBtn.Click())
+
+	// wait for table refresh (edit button reappears after HTMX swap completes)
+	// this is more reliable than waiting for modal .active class removal
+	waitVisible(t, row.Locator(".btn-edit"))
 }
 
 // deleteKey deletes a key via UI
