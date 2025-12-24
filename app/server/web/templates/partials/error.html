@@ -1,0 +1,31 @@
+{{define "error"}}
+<div class="modal-header">
+    <h2>Error</h2>
+    <div class="modal-header-right">
+        <button class="modal-close" onclick="hideModal('main-modal')">&times;</button>
+    </div>
+</div>
+<div class="modal-body">
+    <div class="error-modal-content">
+        <div class="error-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+        </div>
+        <div class="error-text">{{.Error}}</div>
+    </div>
+</div>
+<div class="modal-footer">
+    <button class="btn btn-secondary" onclick="hideModal('main-modal')">Close</button>
+</div>
+<style>
+    #main-modal .modal { --modal-width: 420px; }
+    #main-modal .modal-body { min-height: auto; padding: 32px 24px; }
+    #main-modal .value-content { min-height: auto; }
+    .error-modal-content { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; }
+    .error-icon { color: var(--color-danger); }
+    .error-text { color: var(--color-danger); font-size: 15px; line-height: 1.5; }
+</style>
+{{end}}

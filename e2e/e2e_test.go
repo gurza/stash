@@ -879,3 +879,29 @@ func TestUI_SyntaxHighlighting(t *testing.T) {
 	waitHidden(t, modal)
 	deleteKey(t, page, keyName)
 }
+
+func TestUI_SecretsNotConfiguredError(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "admin", "testpass")
+
+	// try to create a key with "secrets" in path when --secrets.key is not configured
+	require.NoError(t, page.Locator(`button:has-text("New Key")`).Click())
+	modal := page.Locator("#main-modal.active")
+	waitVisible(t, modal)
+
+	require.NoError(t, page.Locator(`input[name="key"]`).Fill("secrets/test-key"))
+	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill("test value"))
+	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
+
+	// should show error message in form
+	errorMsg := page.Locator("#form-error")
+	waitVisible(t, errorMsg)
+
+	errorText, err := errorMsg.TextContent()
+	require.NoError(t, err)
+	assert.Contains(t, errorText, "Secrets not configured", "should show secrets not configured error")
+
+	// close modal
+	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
+	waitHidden(t, modal)
+}

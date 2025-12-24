@@ -879,7 +879,8 @@ func TestHandler_HandleKeyRestore(t *testing.T) {
 }
 
 func TestHandler_SecretsNotConfigured(t *testing.T) {
-	// tests that handlers return 400 when operating on secret paths without secrets configured
+	// tests that handlers render error template when operating on secret paths without secrets configured
+	// returns 200 for HTMX compatibility (HTMX doesn't swap content on 4xx responses)
 
 	t.Run("handleKeyView", func(t *testing.T) {
 		st := &mocks.KVStoreMock{
@@ -897,8 +898,8 @@ func TestHandler_SecretsNotConfigured(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.handleKeyView(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "secrets not configured")
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, strings.ToLower(rec.Body.String()), "secrets not configured")
 	})
 
 	t.Run("handleKeyEdit", func(t *testing.T) {
@@ -918,8 +919,8 @@ func TestHandler_SecretsNotConfigured(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.handleKeyEdit(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "secrets not configured")
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, strings.ToLower(rec.Body.String()), "secrets not configured")
 	})
 
 	t.Run("handleKeyCreate", func(t *testing.T) {
@@ -943,8 +944,8 @@ func TestHandler_SecretsNotConfigured(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.handleKeyCreate(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "secrets not configured")
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, strings.ToLower(rec.Body.String()), "secrets not configured")
 	})
 
 	t.Run("handleKeyUpdate", func(t *testing.T) {
@@ -965,8 +966,8 @@ func TestHandler_SecretsNotConfigured(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.handleKeyUpdate(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "secrets not configured")
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, strings.ToLower(rec.Body.String()), "secrets not configured")
 	})
 
 	t.Run("handleKeyRestore", func(t *testing.T) {
@@ -991,8 +992,8 @@ func TestHandler_SecretsNotConfigured(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.handleKeyRestore(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "secrets not configured")
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, strings.ToLower(rec.Body.String()), "secrets not configured")
 	})
 }
 

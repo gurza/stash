@@ -214,7 +214,7 @@ func parseTemplates() (*template.Template, error) {
 	}
 
 	// parse partials
-	partials := []string{"keys-table", "form", "view", "history", "revision"}
+	partials := []string{"keys-table", "form", "view", "history", "revision", "error"}
 	for _, name := range partials {
 		content, readErr := templatesFS.ReadFile("templates/partials/" + name + ".html")
 		if readErr != nil {

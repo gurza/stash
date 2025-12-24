@@ -7,6 +7,8 @@ users:
     permissions:
       - prefix: "*"
         access: rw
+      - prefix: "secrets/*"
+        access: rw
 
   - name: readonly
     password: $2a$10$NgkQ//qToD01pjDUq12/neYkmOoVwQteZ8g.M.j4lUSeN/K9RQzU2

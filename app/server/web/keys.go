@@ -117,7 +117,7 @@ func (h *Handler) handleKeyView(w http.ResponseWriter, r *http.Request) {
 	value, format, err := h.store.GetWithFormat(r.Context(), key)
 	if err != nil {
 		if errors.Is(err, store.ErrSecretsNotConfigured) {
-			http.Error(w, "secrets not configured", http.StatusBadRequest)
+			h.renderError(w, "Secrets not configured: keys with 'secrets' in path require --secrets.key")
 			return
 		}
 		if errors.Is(err, store.ErrNotFound) {
@@ -174,7 +174,7 @@ func (h *Handler) handleKeyEdit(w http.ResponseWriter, r *http.Request) {
 	value, format, err := h.store.GetWithFormat(r.Context(), key)
 	if err != nil {
 		if errors.Is(err, store.ErrSecretsNotConfigured) {
-			http.Error(w, "secrets not configured", http.StatusBadRequest)
+			h.renderError(w, "Secrets not configured: keys with 'secrets' in path require --secrets.key")
 			return
 		}
 		if errors.Is(err, store.ErrNotFound) {
@@ -261,32 +261,23 @@ func (h *Handler) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 	_, _, getErr := h.store.GetWithFormat(r.Context(), key)
 	if getErr != nil && !errors.Is(getErr, store.ErrNotFound) {
 		if errors.Is(getErr, store.ErrSecretsNotConfigured) {
-			http.Error(w, "secrets not configured", http.StatusBadRequest)
+			h.renderFormError(w, templateData{
+				Key: key, Value: valueStr, Format: format, Formats: h.validator.SupportedFormats(),
+				IsNew: true, Error: "Secrets not configured: keys with 'secrets' in path require --secrets.key",
+				BaseURL: h.baseURL, CanWrite: true, Username: username,
+			})
 			return
 		}
-		// unexpected store error
 		log.Printf("[ERROR] failed to check key existence: %v", getErr)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if getErr == nil {
-		// key exists - return error
-		w.Header().Set("HX-Retarget", "#modal-content")
-		w.Header().Set("HX-Reswap", "innerHTML")
-		data := templateData{
-			Key:      key,
-			Value:    valueStr,
-			Format:   format,
-			Formats:  h.validator.SupportedFormats(),
-			IsNew:    true,
-			Error:    fmt.Sprintf("key %q already exists", key),
-			BaseURL:  h.baseURL,
-			CanWrite: true,
-			Username: username,
-		}
-		if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
-			log.Printf("[ERROR] failed to execute template: %v", err)
-		}
+		h.renderFormError(w, templateData{
+			Key: key, Value: valueStr, Format: format, Formats: h.validator.SupportedFormats(),
+			IsNew: true, Error: fmt.Sprintf("key %q already exists", key),
+			BaseURL: h.baseURL, CanWrite: true, Username: username,
+		})
 		return
 	}
 
@@ -324,7 +315,11 @@ func (h *Handler) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.Set(r.Context(), key, value, format); err != nil {
 		if errors.Is(err, store.ErrSecretsNotConfigured) {
-			http.Error(w, "secrets not configured", http.StatusBadRequest)
+			h.renderFormError(w, templateData{
+				Key: key, Value: valueStr, Format: format, Formats: h.validator.SupportedFormats(),
+				IsNew: true, Error: "Secrets not configured: keys with 'secrets' in path require --secrets.key",
+				BaseURL: h.baseURL, CanWrite: true, Username: username,
+			})
 			return
 		}
 		log.Printf("[ERROR] failed to set key: %v", err)
@@ -356,27 +351,12 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 	// check write permission
 	username := h.getCurrentUser(r)
 	if !h.auth.CheckUserPermission(username, key, true) {
-		// re-render form with error message, retarget to modal content
-		w.Header().Set("HX-Retarget", "#modal-content")
-		w.Header().Set("HX-Reswap", "innerHTML")
 		modalWidth, textareaHeight := h.calculateModalDimensions(valueStr)
-		data := templateData{
-			Key:            key,
-			Value:          valueStr,
-			Format:         format,
-			Formats:        h.validator.SupportedFormats(),
-			IsBinary:       isBinary,
-			IsNew:          false,
-			Error:          "Access denied: you don't have write permission for this key",
-			BaseURL:        h.baseURL,
-			ModalWidth:     modalWidth,
-			TextareaHeight: textareaHeight,
-			CanWrite:       false,
-			Username:       username,
-		}
-		if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
-			log.Printf("[ERROR] failed to execute template: %v", err)
-		}
+		h.renderFormError(w, templateData{
+			Key: key, Value: valueStr, Format: format, Formats: h.validator.SupportedFormats(),
+			IsBinary: isBinary, IsNew: false, Error: "Access denied: you don't have write permission for this key",
+			BaseURL: h.baseURL, ModalWidth: modalWidth, TextareaHeight: textareaHeight, CanWrite: false, Username: username,
+		})
 		return
 	}
 
@@ -408,7 +388,12 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.SetWithVersion(r.Context(), key, value, format, expectedVersion); err != nil {
 		if errors.Is(err, store.ErrSecretsNotConfigured) {
-			http.Error(w, "secrets not configured", http.StatusBadRequest)
+			modalWidth, textareaHeight := h.calculateModalDimensions(valueStr)
+			h.renderFormError(w, templateData{
+				Key: key, Value: valueStr, Format: format, Formats: h.validator.SupportedFormats(),
+				IsBinary: isBinary, IsNew: false, Error: "Secrets not configured: keys with 'secrets' in path require --secrets.key",
+				BaseURL: h.baseURL, ModalWidth: modalWidth, TextareaHeight: textareaHeight, CanWrite: true, Username: username,
+			})
 			return
 		}
 		var conflictErr *store.ConflictError
@@ -618,7 +603,7 @@ func (h *Handler) handleKeyRestore(w http.ResponseWriter, r *http.Request) {
 	// save to store
 	if err := h.store.Set(r.Context(), key, value, format); err != nil {
 		if errors.Is(err, store.ErrSecretsNotConfigured) {
-			http.Error(w, "secrets not configured", http.StatusBadRequest)
+			h.renderError(w, "Secrets not configured: keys with 'secrets' in path require --secrets.key")
 			return
 		}
 		log.Printf("[ERROR] failed to set key %s: %v", key, err)
@@ -702,6 +687,24 @@ func (h *Handler) renderValidationError(w http.ResponseWriter, p validationError
 		Username:       p.Username,
 		conflictData:   conflictData{UpdatedAt: p.UpdatedAt},
 	}
+	if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
+		log.Printf("[ERROR] failed to execute template: %v", err)
+	}
+}
+
+// renderError renders an error message in the modal.
+func (h *Handler) renderError(w http.ResponseWriter, errMsg string) {
+	data := templateData{Error: errMsg}
+	if err := h.tmpl.ExecuteTemplate(w, "error", data); err != nil {
+		log.Printf("[ERROR] failed to execute error template: %v", err)
+		http.Error(w, errMsg, http.StatusBadRequest)
+	}
+}
+
+// renderFormError re-renders a form with an error message, using HX-Retarget for HTMX.
+func (h *Handler) renderFormError(w http.ResponseWriter, data templateData) {
+	w.Header().Set("HX-Retarget", "#modal-content")
+	w.Header().Set("HX-Reswap", "innerHTML")
 	if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
 		log.Printf("[ERROR] failed to execute template: %v", err)
 	}
