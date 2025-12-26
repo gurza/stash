@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,6 +15,46 @@ import (
 
 	"github.com/umputun/stash/app/enum"
 )
+
+// pgConnString is set by TestMain; read-only after initialization.
+var pgConnString string
+
+var testEngines = []string{"sqlite", "postgres"}
+
+func newTestStore(t *testing.T, engine string, opts ...Option) *Store {
+	t.Helper()
+	var connStr string
+	switch engine {
+	case "sqlite":
+		connStr = filepath.Join(t.TempDir(), "test.db")
+	case "postgres":
+		connStr = pgConnString
+	default:
+		t.Fatalf("unknown engine: %s", engine)
+	}
+	store, err := New(connStr, opts...)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+
+	pgContainer, err := containers.NewPostgresTestContainerWithDBE(ctx, "stash_test")
+	if err != nil {
+		panic("failed to start postgres container: " + err.Error())
+	}
+
+	pgConnString = pgContainer.ConnectionString()
+
+	code := m.Run()
+
+	if err := pgContainer.Close(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to close postgres container: %v\n", err)
+	}
+	os.Exit(code)
+}
 
 func TestNew(t *testing.T) {
 	t.Run("creates database successfully", func(t *testing.T) {
@@ -30,464 +72,228 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestSQLite_SetGet(t *testing.T) {
-	store := newTestStore(t)
-	defer store.Close()
+func TestStore_SetGet(t *testing.T) {
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine)
 
-	t.Run("set and get value", func(t *testing.T) {
-		err := store.Set(t.Context(), "key1", []byte("value1"), "text")
-		require.NoError(t, err)
+			t.Run("set and get value", func(t *testing.T) {
+				err := store.Set(t.Context(), "key1", []byte("value1"), "text")
+				require.NoError(t, err)
 
-		value, err := store.Get(t.Context(), "key1")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("value1"), value)
-	})
+				value, err := store.Get(t.Context(), "key1")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("value1"), value)
+			})
 
-	t.Run("update existing key", func(t *testing.T) {
-		err := store.Set(t.Context(), "key2", []byte("original"), "text")
-		require.NoError(t, err)
+			t.Run("update existing key", func(t *testing.T) {
+				err := store.Set(t.Context(), "key2", []byte("original"), "text")
+				require.NoError(t, err)
 
-		err = store.Set(t.Context(), "key2", []byte("updated"), "text")
-		require.NoError(t, err)
+				err = store.Set(t.Context(), "key2", []byte("updated"), "text")
+				require.NoError(t, err)
 
-		value, err := store.Get(t.Context(), "key2")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("updated"), value)
-	})
+				value, err := store.Get(t.Context(), "key2")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("updated"), value)
+			})
 
-	t.Run("get nonexistent key returns ErrNotFound", func(t *testing.T) {
-		_, err := store.Get(t.Context(), "nonexistent")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+			t.Run("get nonexistent key returns ErrNotFound", func(t *testing.T) {
+				_, err := store.Get(t.Context(), "nonexistent")
+				require.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("handles binary data", func(t *testing.T) {
-		binary := []byte{0x00, 0x01, 0xFF, 0xFE}
-		err := store.Set(t.Context(), "binary", binary, "text")
-		require.NoError(t, err)
+			t.Run("handles binary data", func(t *testing.T) {
+				binary := []byte{0x00, 0x01, 0xFF, 0xFE}
+				err := store.Set(t.Context(), "binary", binary, "text")
+				require.NoError(t, err)
 
-		value, err := store.Get(t.Context(), "binary")
-		require.NoError(t, err)
-		assert.Equal(t, binary, value)
-	})
+				value, err := store.Get(t.Context(), "binary")
+				require.NoError(t, err)
+				assert.Equal(t, binary, value)
+			})
 
-	t.Run("handles empty value", func(t *testing.T) {
-		err := store.Set(t.Context(), "empty", []byte{}, "text")
-		require.NoError(t, err)
+			t.Run("handles empty value", func(t *testing.T) {
+				err := store.Set(t.Context(), "empty", []byte{}, "text")
+				require.NoError(t, err)
 
-		value, err := store.Get(t.Context(), "empty")
-		require.NoError(t, err)
-		assert.Empty(t, value)
-	})
+				value, err := store.Get(t.Context(), "empty")
+				require.NoError(t, err)
+				assert.Empty(t, value)
+			})
+		})
+	}
 }
 
-func TestSQLite_UpdatedAt(t *testing.T) {
-	store := newTestStore(t)
-	defer store.Close()
+func TestStore_UpdatedAt(t *testing.T) {
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine)
 
-	// set initial value
-	err := store.Set(t.Context(), "timekey", []byte("v1"), "text")
-	require.NoError(t, err)
+			// set initial value
+			err := store.Set(t.Context(), "timekey", []byte("v1"), "text")
+			require.NoError(t, err)
 
-	// get created_at
-	var created, updated1 string
-	err = store.db.Get(&created, "SELECT created_at FROM kv WHERE key = ?", "timekey")
-	require.NoError(t, err)
-	err = store.db.Get(&updated1, "SELECT updated_at FROM kv WHERE key = ?", "timekey")
-	require.NoError(t, err)
-	assert.Equal(t, created, updated1, "created_at and updated_at should match on insert")
+			// get created_at
+			var created, updated1 string
+			err = store.db.Get(&created, store.adoptQuery("SELECT created_at FROM kv WHERE key = ?"), "timekey")
+			require.NoError(t, err)
+			err = store.db.Get(&updated1, store.adoptQuery("SELECT updated_at FROM kv WHERE key = ?"), "timekey")
+			require.NoError(t, err)
+			assert.Equal(t, created, updated1, "created_at and updated_at should match on insert")
 
-	// update value (wait to ensure different timestamp - RFC3339 has second precision)
-	time.Sleep(1100 * time.Millisecond)
-	err = store.Set(t.Context(), "timekey", []byte("v2"), "text")
-	require.NoError(t, err)
+			// update value (wait to ensure different timestamp - RFC3339 has second precision)
+			time.Sleep(1100 * time.Millisecond)
+			err = store.Set(t.Context(), "timekey", []byte("v2"), "text")
+			require.NoError(t, err)
 
-	// verify updated_at changed but created_at didn't
-	var created2, updated2 string
-	err = store.db.Get(&created2, "SELECT created_at FROM kv WHERE key = ?", "timekey")
-	require.NoError(t, err)
-	err = store.db.Get(&updated2, "SELECT updated_at FROM kv WHERE key = ?", "timekey")
-	require.NoError(t, err)
+			// verify updated_at changed but created_at didn't
+			var created2, updated2 string
+			err = store.db.Get(&created2, store.adoptQuery("SELECT created_at FROM kv WHERE key = ?"), "timekey")
+			require.NoError(t, err)
+			err = store.db.Get(&updated2, store.adoptQuery("SELECT updated_at FROM kv WHERE key = ?"), "timekey")
+			require.NoError(t, err)
 
-	assert.Equal(t, created, created2, "created_at should not change on update")
-	assert.NotEqual(t, updated1, updated2, "updated_at should change on update")
+			assert.Equal(t, created, created2, "created_at should not change on update")
+			assert.NotEqual(t, updated1, updated2, "updated_at should change on update")
+		})
+	}
 }
 
-func TestSQLite_Delete(t *testing.T) {
-	store := newTestStore(t)
-	defer store.Close()
+func TestStore_Delete(t *testing.T) {
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine)
 
-	t.Run("delete existing key", func(t *testing.T) {
-		err := store.Set(t.Context(), "todelete", []byte("value"), "text")
-		require.NoError(t, err)
+			t.Run("delete existing key", func(t *testing.T) {
+				err := store.Set(t.Context(), "todelete", []byte("value"), "text")
+				require.NoError(t, err)
 
-		err = store.Delete(t.Context(), "todelete")
-		require.NoError(t, err)
+				err = store.Delete(t.Context(), "todelete")
+				require.NoError(t, err)
 
-		_, err = store.Get(t.Context(), "todelete")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+				_, err = store.Get(t.Context(), "todelete")
+				require.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("delete nonexistent key returns ErrNotFound", func(t *testing.T) {
-		err := store.Delete(t.Context(), "nonexistent")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+			t.Run("delete nonexistent key returns ErrNotFound", func(t *testing.T) {
+				err := store.Delete(t.Context(), "nonexistent-del")
+				require.ErrorIs(t, err, ErrNotFound)
+			})
+		})
+	}
 }
 
-func TestSQLite_List(t *testing.T) {
-	store := newTestStore(t)
-	defer store.Close()
+func TestStore_List(t *testing.T) {
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine)
 
-	t.Run("empty store returns empty slice", func(t *testing.T) {
-		keys, err := store.List(t.Context(), enum.SecretsFilterAll)
-		require.NoError(t, err)
-		assert.Empty(t, keys)
-	})
+			t.Run("returns keys with correct metadata", func(t *testing.T) {
+				err := store.Set(t.Context(), "list/key1", []byte("short"), "text")
+				require.NoError(t, err)
+				err = store.Set(t.Context(), "list/key2", []byte("longer value here"), "json")
+				require.NoError(t, err)
 
-	t.Run("returns keys with correct metadata", func(t *testing.T) {
-		err := store.Set(t.Context(), "key1", []byte("short"), "text")
-		require.NoError(t, err)
-		err = store.Set(t.Context(), "key2", []byte("longer value here"), "json")
-		require.NoError(t, err)
+				keys, err := store.List(t.Context(), enum.SecretsFilterAll)
+				require.NoError(t, err)
 
-		keys, err := store.List(t.Context(), enum.SecretsFilterAll)
-		require.NoError(t, err)
-		require.Len(t, keys, 2)
+				// find our keys in results (postgres may have other keys from parallel tests)
+				var key1Info, key2Info *KeyInfo
+				for i := range keys {
+					if keys[i].Key == "list/key1" {
+						key1Info = &keys[i]
+					}
+					if keys[i].Key == "list/key2" {
+						key2Info = &keys[i]
+					}
+				}
+				require.NotNil(t, key1Info)
+				require.NotNil(t, key2Info)
 
-		// find key1 and key2 in results
-		var key1Info, key2Info *KeyInfo
-		for i := range keys {
-			if keys[i].Key == "key1" {
-				key1Info = &keys[i]
-			}
-			if keys[i].Key == "key2" {
-				key2Info = &keys[i]
-			}
-		}
-		require.NotNil(t, key1Info)
-		require.NotNil(t, key2Info)
+				assert.Equal(t, 5, key1Info.Size)  // len("short")
+				assert.Equal(t, 17, key2Info.Size) // len("longer value here")
+				assert.Equal(t, "text", key1Info.Format)
+				assert.Equal(t, "json", key2Info.Format)
+				assert.False(t, key1Info.CreatedAt.IsZero())
+				assert.False(t, key1Info.UpdatedAt.IsZero())
+			})
 
-		assert.Equal(t, 5, key1Info.Size)  // len("short")
-		assert.Equal(t, 17, key2Info.Size) // len("longer value here")
-		assert.Equal(t, "text", key1Info.Format)
-		assert.Equal(t, "json", key2Info.Format)
-		assert.False(t, key1Info.CreatedAt.IsZero())
-		assert.False(t, key1Info.UpdatedAt.IsZero())
-	})
+			t.Run("ordered by updated_at descending", func(t *testing.T) {
+				// use unique prefix to avoid conflicts with other tests
+				prefix := "list-order/" + engine + "/"
 
-	t.Run("ordered by updated_at descending", func(t *testing.T) {
-		store2 := newTestStore(t)
-		defer store2.Close()
+				// create keys with delay to ensure different timestamps
+				err := store.Set(t.Context(), prefix+"first", []byte("1"), "text")
+				require.NoError(t, err)
+				time.Sleep(1100 * time.Millisecond) // RFC3339 has second precision
+				err = store.Set(t.Context(), prefix+"second", []byte("2"), "yaml")
+				require.NoError(t, err)
 
-		// create keys with delay to ensure different timestamps
-		err := store2.Set(t.Context(), "first", []byte("1"), "text")
-		require.NoError(t, err)
-		time.Sleep(1100 * time.Millisecond) // RFC3339 has second precision
-		err = store2.Set(t.Context(), "second", []byte("2"), "yaml")
-		require.NoError(t, err)
+				keys, err := store.List(t.Context(), enum.SecretsFilterAll)
+				require.NoError(t, err)
 
-		keys, err := store2.List(t.Context(), enum.SecretsFilterAll)
-		require.NoError(t, err)
-		require.Len(t, keys, 2)
+				// find our keys and check their relative order
+				var firstIdx, secondIdx = -1, -1
+				for i, k := range keys {
+					if k.Key == prefix+"first" {
+						firstIdx = i
+					}
+					if k.Key == prefix+"second" {
+						secondIdx = i
+					}
+				}
+				require.NotEqual(t, -1, firstIdx, "first key not found")
+				require.NotEqual(t, -1, secondIdx, "second key not found")
 
-		// most recently updated should be first
-		assert.Equal(t, "second", keys[0].Key)
-		assert.Equal(t, "first", keys[1].Key)
-	})
+				// most recently updated should come before older (lower index = earlier in list)
+				assert.Less(t, secondIdx, firstIdx, "second (newer) should come before first (older)")
+			})
+		})
+	}
 }
 
 func TestStore_GetInfo(t *testing.T) {
-	st := newTestStore(t)
-	defer st.Close()
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			st := newTestStore(t, engine)
 
-	// create a key
-	err := st.Set(t.Context(), "testkey", []byte("testvalue"), "json")
-	require.NoError(t, err)
+			// create a key
+			err := st.Set(t.Context(), "info/testkey", []byte("testvalue"), "json")
+			require.NoError(t, err)
 
-	t.Run("returns key info for existing key", func(t *testing.T) {
-		info, err := st.GetInfo(t.Context(), "testkey")
-		require.NoError(t, err)
+			t.Run("returns key info for existing key", func(t *testing.T) {
+				info, err := st.GetInfo(t.Context(), "info/testkey")
+				require.NoError(t, err)
 
-		assert.Equal(t, "testkey", info.Key)
-		assert.Equal(t, 9, info.Size) // len("testvalue")
-		assert.Equal(t, "json", info.Format)
-		assert.False(t, info.CreatedAt.IsZero())
-		assert.False(t, info.UpdatedAt.IsZero())
-	})
+				assert.Equal(t, "info/testkey", info.Key)
+				assert.Equal(t, 9, info.Size) // len("testvalue")
+				assert.Equal(t, "json", info.Format)
+				assert.False(t, info.CreatedAt.IsZero())
+				assert.False(t, info.UpdatedAt.IsZero())
+			})
 
-	t.Run("returns ErrNotFound for nonexistent key", func(t *testing.T) {
-		_, err := st.GetInfo(t.Context(), "nonexistent")
-		assert.ErrorIs(t, err, ErrNotFound)
-	})
+			t.Run("returns ErrNotFound for nonexistent key", func(t *testing.T) {
+				_, err := st.GetInfo(t.Context(), "nonexistent-info")
+				assert.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("updated_at changes on update", func(t *testing.T) {
-		info1, err := st.GetInfo(t.Context(), "testkey")
-		require.NoError(t, err)
+			t.Run("updated_at changes on update", func(t *testing.T) {
+				info1, err := st.GetInfo(t.Context(), "info/testkey")
+				require.NoError(t, err)
 
-		time.Sleep(1100 * time.Millisecond) // ensure timestamp changes
-		err = st.Set(t.Context(), "testkey", []byte("updated"), "text")
-		require.NoError(t, err)
+				time.Sleep(1100 * time.Millisecond) // ensure timestamp changes
+				err = st.Set(t.Context(), "info/testkey", []byte("updated"), "text")
+				require.NoError(t, err)
 
-		info2, err := st.GetInfo(t.Context(), "testkey")
-		require.NoError(t, err)
+				info2, err := st.GetInfo(t.Context(), "info/testkey")
+				require.NoError(t, err)
 
-		assert.True(t, info2.UpdatedAt.After(info1.UpdatedAt), "updated_at should be newer")
-		assert.Equal(t, info1.CreatedAt, info2.CreatedAt, "created_at should not change")
-	})
-}
-
-func newTestStore(t *testing.T) *Store {
-	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	store, err := New(dbPath)
-	require.NoError(t, err)
-	return store
-}
-
-// PostgreSQL tests using testcontainers
-
-func TestStore_Postgres(t *testing.T) {
-	ctx := context.Background()
-
-	t.Log("starting postgres container...")
-	pgContainer := containers.NewPostgresTestContainerWithDB(ctx, t, "stash_test")
-	defer pgContainer.Close(ctx)
-	t.Log("postgres container started")
-
-	store, err := New(pgContainer.ConnectionString())
-	require.NoError(t, err)
-	defer store.Close()
-
-	assert.Equal(t, DBTypePostgres, store.dbType)
-
-	t.Run("set and get value", func(t *testing.T) {
-		err := store.Set(t.Context(), "pgkey1", []byte("pgvalue1"), "text")
-		require.NoError(t, err)
-
-		value, err := store.Get(t.Context(), "pgkey1")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("pgvalue1"), value)
-	})
-
-	t.Run("update existing key", func(t *testing.T) {
-		err := store.Set(t.Context(), "pgkey2", []byte("original"), "text")
-		require.NoError(t, err)
-
-		err = store.Set(t.Context(), "pgkey2", []byte("updated"), "json")
-		require.NoError(t, err)
-
-		value, err := store.Get(t.Context(), "pgkey2")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("updated"), value)
-	})
-
-	t.Run("get nonexistent key returns ErrNotFound", func(t *testing.T) {
-		_, err := store.Get(t.Context(), "nonexistent")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
-
-	t.Run("handles binary data", func(t *testing.T) {
-		binary := []byte{0x00, 0x01, 0xFF, 0xFE}
-		err := store.Set(t.Context(), "pgbinary", binary, "text")
-		require.NoError(t, err)
-
-		value, err := store.Get(t.Context(), "pgbinary")
-		require.NoError(t, err)
-		assert.Equal(t, binary, value)
-	})
-
-	t.Run("delete existing key", func(t *testing.T) {
-		err := store.Set(t.Context(), "pgtodelete", []byte("value"), "text")
-		require.NoError(t, err)
-
-		err = store.Delete(t.Context(), "pgtodelete")
-		require.NoError(t, err)
-
-		_, err = store.Get(t.Context(), "pgtodelete")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
-
-	t.Run("delete nonexistent key returns ErrNotFound", func(t *testing.T) {
-		err := store.Delete(t.Context(), "nonexistent")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
-
-	t.Run("list returns keys with metadata", func(t *testing.T) {
-		err := store.Set(t.Context(), "pglist1", []byte("short"), "yaml")
-		require.NoError(t, err)
-		err = store.Set(t.Context(), "pglist2", []byte("longer value"), "json")
-		require.NoError(t, err)
-
-		keys, err := store.List(t.Context(), enum.SecretsFilterAll)
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, len(keys), 2)
-
-		// find our keys
-		var found1, found2 bool
-		for _, k := range keys {
-			if k.Key == "pglist1" {
-				assert.Equal(t, 5, k.Size)
-				assert.Equal(t, "yaml", k.Format)
-				found1 = true
-			}
-			if k.Key == "pglist2" {
-				assert.Equal(t, 12, k.Size)
-				assert.Equal(t, "json", k.Format)
-				found2 = true
-			}
-		}
-		assert.True(t, found1, "pglist1 not found")
-		assert.True(t, found2, "pglist2 not found")
-	})
-
-	t.Run("get info returns correct metadata", func(t *testing.T) {
-		err := store.Set(t.Context(), "pginfo", []byte("test value"), "json")
-		require.NoError(t, err)
-
-		info, err := store.GetInfo(t.Context(), "pginfo")
-		require.NoError(t, err)
-		assert.Equal(t, "pginfo", info.Key)
-		assert.Equal(t, 10, info.Size) // len("test value")
-		assert.Equal(t, "json", info.Format)
-		assert.False(t, info.CreatedAt.IsZero())
-		assert.False(t, info.UpdatedAt.IsZero())
-	})
-
-	t.Run("set with version succeeds when version matches", func(t *testing.T) {
-		err := store.Set(t.Context(), "pgversioned", []byte("initial"), "text")
-		require.NoError(t, err)
-
-		info, err := store.GetInfo(t.Context(), "pgversioned")
-		require.NoError(t, err)
-
-		err = store.SetWithVersion(t.Context(), "pgversioned", []byte("updated"), "json", info.UpdatedAt)
-		require.NoError(t, err)
-
-		value, format, err := store.GetWithFormat(t.Context(), "pgversioned")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("updated"), value)
-		assert.Equal(t, "json", format)
-	})
-
-	t.Run("set with version fails on conflict", func(t *testing.T) {
-		err := store.Set(t.Context(), "pgconflict", []byte("original"), "text")
-		require.NoError(t, err)
-
-		info1, err := store.GetInfo(t.Context(), "pgconflict")
-		require.NoError(t, err)
-
-		// simulate concurrent update
-		time.Sleep(1100 * time.Millisecond)
-		err = store.Set(t.Context(), "pgconflict", []byte("concurrent"), "yaml")
-		require.NoError(t, err)
-
-		// try update with old version
-		err = store.SetWithVersion(t.Context(), "pgconflict", []byte("my-update"), "json", info1.UpdatedAt)
-		require.ErrorIs(t, err, ErrConflict)
-
-		var conflictErr *ConflictError
-		require.ErrorAs(t, err, &conflictErr)
-		assert.Equal(t, []byte("concurrent"), conflictErr.Info.CurrentValue)
-	})
-
-	t.Run("session create and get", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-		err := store.CreateSession(t.Context(), "pg-token1", "pguser1", expires)
-		require.NoError(t, err)
-
-		username, expiresAt, err := store.GetSession(t.Context(), "pg-token1")
-		require.NoError(t, err)
-		assert.Equal(t, "pguser1", username)
-		assert.Equal(t, expires.Unix(), expiresAt.Unix())
-	})
-
-	t.Run("session delete", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC()
-		err := store.CreateSession(t.Context(), "pg-token-del", "user", expires)
-		require.NoError(t, err)
-
-		err = store.DeleteSession(t.Context(), "pg-token-del")
-		require.NoError(t, err)
-
-		_, _, err = store.GetSession(t.Context(), "pg-token-del")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
-
-	t.Run("session delete all", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC()
-		_ = store.CreateSession(t.Context(), "pg-all-a", "user", expires)
-		_ = store.CreateSession(t.Context(), "pg-all-b", "user", expires)
-
-		err := store.DeleteAllSessions(t.Context())
-		require.NoError(t, err)
-
-		_, _, err = store.GetSession(t.Context(), "pg-all-a")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
-
-	t.Run("session delete expired", func(t *testing.T) {
-		expired := time.Now().Add(-time.Hour).UTC()
-		_ = store.CreateSession(t.Context(), "pg-expired", "user", expired)
-
-		valid := time.Now().Add(time.Hour).UTC()
-		_ = store.CreateSession(t.Context(), "pg-valid", "user", valid)
-
-		deleted, err := store.DeleteExpiredSessions(t.Context())
-		require.NoError(t, err)
-		assert.GreaterOrEqual(t, deleted, int64(1))
-
-		_, _, err = store.GetSession(t.Context(), "pg-expired")
-		require.ErrorIs(t, err, ErrNotFound)
-
-		_, _, err = store.GetSession(t.Context(), "pg-valid")
-		require.NoError(t, err)
-	})
-
-	t.Run("session expiration respects UTC timezone", func(t *testing.T) {
-		// store session with explicit UTC time
-		expires := time.Now().Add(30 * time.Minute).UTC().Truncate(time.Second)
-		err := store.CreateSession(t.Context(), "pg-tz-token", "tzuser", expires)
-		require.NoError(t, err)
-
-		// retrieve and verify UTC is preserved
-		username, expiresAt, err := store.GetSession(t.Context(), "pg-tz-token")
-		require.NoError(t, err)
-		assert.Equal(t, "tzuser", username)
-
-		// verify the time instant matches (same point in time)
-		assert.Equal(t, expires.Unix(), expiresAt.Unix(), "expiration instant should match")
-
-		// verify the returned time is in UTC location
-		assert.Equal(t, "UTC", expiresAt.Location().String(), "returned time should be in UTC")
-	})
-
-	t.Run("session delete by username", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC()
-		// create sessions for different users
-		_ = store.CreateSession(t.Context(), "pg-alice-1", "alice", expires)
-		_ = store.CreateSession(t.Context(), "pg-alice-2", "alice", expires)
-		_ = store.CreateSession(t.Context(), "pg-bob-1", "bob", expires)
-
-		// delete alice's sessions only
-		err := store.DeleteSessionsByUsername(t.Context(), "alice")
-		require.NoError(t, err)
-
-		// alice's sessions should be gone
-		_, _, err = store.GetSession(t.Context(), "pg-alice-1")
-		require.ErrorIs(t, err, ErrNotFound)
-		_, _, err = store.GetSession(t.Context(), "pg-alice-2")
-		require.ErrorIs(t, err, ErrNotFound)
-
-		// bob's session should remain
-		username, _, err := store.GetSession(t.Context(), "pg-bob-1")
-		require.NoError(t, err)
-		assert.Equal(t, "bob", username)
-	})
-
-	t.Run("session delete by username - no sessions", func(t *testing.T) {
-		// should not error when user has no sessions
-		err := store.DeleteSessionsByUsername(t.Context(), "pg-nonexistent-user")
-		require.NoError(t, err)
-	})
+				assert.True(t, info2.UpdatedAt.After(info1.UpdatedAt), "updated_at should be newer")
+				assert.Equal(t, info1.CreatedAt, info2.CreatedAt, "created_at should not change")
+			})
+		})
+	}
 }
 
 func TestDetectDBType(t *testing.T) {
@@ -536,662 +342,713 @@ func TestAdoptQuery(t *testing.T) {
 	})
 }
 
-func TestSQLite_Format(t *testing.T) {
-	store := newTestStore(t)
-	defer store.Close()
+func TestStore_Format(t *testing.T) {
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine)
 
-	t.Run("set with format and get with format", func(t *testing.T) {
-		err := store.Set(t.Context(), "jsonkey", []byte(`{"key": "value"}`), "json")
-		require.NoError(t, err)
+			t.Run("set with format and get with format", func(t *testing.T) {
+				err := store.Set(t.Context(), "fmt/jsonkey", []byte(`{"key": "value"}`), "json")
+				require.NoError(t, err)
 
-		value, format, err := store.GetWithFormat(t.Context(), "jsonkey")
-		require.NoError(t, err)
-		assert.JSONEq(t, `{"key": "value"}`, string(value))
-		assert.Equal(t, "json", format)
-	})
+				value, format, err := store.GetWithFormat(t.Context(), "fmt/jsonkey")
+				require.NoError(t, err)
+				assert.JSONEq(t, `{"key": "value"}`, string(value))
+				assert.Equal(t, "json", format)
+			})
 
-	t.Run("empty format defaults to text", func(t *testing.T) {
-		err := store.Set(t.Context(), "defaultkey", []byte("some value"), "")
-		require.NoError(t, err)
+			t.Run("empty format defaults to text", func(t *testing.T) {
+				err := store.Set(t.Context(), "fmt/defaultkey", []byte("some value"), "")
+				require.NoError(t, err)
 
-		value, format, err := store.GetWithFormat(t.Context(), "defaultkey")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("some value"), value)
-		assert.Equal(t, "text", format)
-	})
+				value, format, err := store.GetWithFormat(t.Context(), "fmt/defaultkey")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("some value"), value)
+				assert.Equal(t, "text", format)
+			})
 
-	t.Run("format updates when key is updated", func(t *testing.T) {
-		err := store.Set(t.Context(), "updatekey", []byte("original"), "text")
-		require.NoError(t, err)
+			t.Run("format updates when key is updated", func(t *testing.T) {
+				err := store.Set(t.Context(), "fmt/updatekey", []byte("original"), "text")
+				require.NoError(t, err)
 
-		_, format, err := store.GetWithFormat(t.Context(), "updatekey")
-		require.NoError(t, err)
-		assert.Equal(t, "text", format)
+				_, format, err := store.GetWithFormat(t.Context(), "fmt/updatekey")
+				require.NoError(t, err)
+				assert.Equal(t, "text", format)
 
-		err = store.Set(t.Context(), "updatekey", []byte(`{"new": "value"}`), "json")
-		require.NoError(t, err)
+				err = store.Set(t.Context(), "fmt/updatekey", []byte(`{"new": "value"}`), "json")
+				require.NoError(t, err)
 
-		value, format, err := store.GetWithFormat(t.Context(), "updatekey")
-		require.NoError(t, err)
-		assert.JSONEq(t, `{"new": "value"}`, string(value))
-		assert.Equal(t, "json", format)
-	})
+				value, format, err := store.GetWithFormat(t.Context(), "fmt/updatekey")
+				require.NoError(t, err)
+				assert.JSONEq(t, `{"new": "value"}`, string(value))
+				assert.Equal(t, "json", format)
+			})
 
-	t.Run("GetWithFormat returns ErrNotFound for nonexistent key", func(t *testing.T) {
-		_, _, err := store.GetWithFormat(t.Context(), "nonexistent")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+			t.Run("GetWithFormat returns ErrNotFound for nonexistent key", func(t *testing.T) {
+				_, _, err := store.GetWithFormat(t.Context(), "nonexistent-fmt")
+				require.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("various formats", func(t *testing.T) {
-		formats := []string{"text", "json", "yaml", "xml", "toml", "ini", "shell"}
-		for _, fmt := range formats {
-			key := "fmt_" + fmt
-			err := store.Set(t.Context(), key, []byte("content"), fmt)
-			require.NoError(t, err)
+			t.Run("various formats", func(t *testing.T) {
+				formats := []string{"text", "json", "yaml", "xml", "toml", "ini", "shell"}
+				for _, fmt := range formats {
+					key := "fmt/various_" + engine + "_" + fmt
+					err := store.Set(t.Context(), key, []byte("content"), fmt)
+					require.NoError(t, err)
 
-			_, gotFmt, err := store.GetWithFormat(t.Context(), key)
-			require.NoError(t, err)
-			assert.Equal(t, fmt, gotFmt)
-		}
-	})
+					_, gotFmt, err := store.GetWithFormat(t.Context(), key)
+					require.NoError(t, err)
+					assert.Equal(t, fmt, gotFmt)
+				}
+			})
+		})
+	}
 }
 
-func TestMigration_SQLite_AddFormatColumn(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "legacy.db")
+func TestStore_Migration(t *testing.T) {
+	t.Run("sqlite/add format column", func(t *testing.T) {
+		dbPath := filepath.Join(t.TempDir(), "legacy.db")
 
-	// create old schema without format column (simulates pre-migration database)
-	db, err := sqlx.Connect("sqlite", dbPath)
-	require.NoError(t, err)
+		// create old schema without format column (simulates pre-migration database)
+		db, err := sqlx.Connect("sqlite", dbPath)
+		require.NoError(t, err)
 
-	_, err = db.Exec(`
-		CREATE TABLE kv (
-			key TEXT PRIMARY KEY,
-			value BLOB NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-	require.NoError(t, err)
+		_, err = db.Exec(`
+			CREATE TABLE kv (
+				key TEXT PRIMARY KEY,
+				value BLOB NOT NULL,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			)
+		`)
+		require.NoError(t, err)
 
-	// insert data using old schema
-	_, err = db.Exec(`INSERT INTO kv (key, value) VALUES (?, ?)`, "legacy-key", []byte("legacy-value"))
-	require.NoError(t, err)
-	require.NoError(t, db.Close())
+		// insert data using old schema
+		_, err = db.Exec(`INSERT INTO kv (key, value) VALUES (?, ?)`, "legacy-key", []byte("legacy-value"))
+		require.NoError(t, err)
+		require.NoError(t, db.Close())
 
-	// open with New() - should run migration
-	store, err := New(dbPath)
-	require.NoError(t, err)
-	defer store.Close()
+		// open with New() - should run migration
+		store, err := New(dbPath)
+		require.NoError(t, err)
+		defer store.Close()
 
-	// verify format column exists and has default value
-	value, format, err := store.GetWithFormat(t.Context(), "legacy-key")
-	require.NoError(t, err)
-	assert.Equal(t, []byte("legacy-value"), value)
-	assert.Equal(t, "text", format, "migrated row should have default format 'text'")
+		// verify format column exists and has default value
+		value, format, err := store.GetWithFormat(t.Context(), "legacy-key")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("legacy-value"), value)
+		assert.Equal(t, "text", format, "migrated row should have default format 'text'")
 
-	// verify new data can be written with format
-	err = store.Set(t.Context(), "new-key", []byte("new-value"), "json")
-	require.NoError(t, err)
+		// verify new data can be written with format
+		err = store.Set(t.Context(), "new-key", []byte("new-value"), "json")
+		require.NoError(t, err)
 
-	value, format, err = store.GetWithFormat(t.Context(), "new-key")
-	require.NoError(t, err)
-	assert.Equal(t, []byte("new-value"), value)
-	assert.Equal(t, "json", format)
+		value, format, err = store.GetWithFormat(t.Context(), "new-key")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("new-value"), value)
+		assert.Equal(t, "json", format)
 
-	// verify List works with migrated data
-	keys, err := store.List(t.Context(), enum.SecretsFilterAll)
-	require.NoError(t, err)
-	assert.Len(t, keys, 2)
-}
+		// verify List works with migrated data
+		keys, err := store.List(t.Context(), enum.SecretsFilterAll)
+		require.NoError(t, err)
+		assert.Len(t, keys, 2)
+	})
 
-func TestMigration_SQLite_AlreadyMigrated(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "already-migrated.db")
+	t.Run("sqlite/already migrated", func(t *testing.T) {
+		dbPath := filepath.Join(t.TempDir(), "already-migrated.db")
 
-	// create new schema with format column
-	store1, err := New(dbPath)
-	require.NoError(t, err)
+		// create new schema with format column
+		store1, err := New(dbPath)
+		require.NoError(t, err)
 
-	err = store1.Set(t.Context(), "test-key", []byte("test-value"), "yaml")
-	require.NoError(t, err)
-	require.NoError(t, store1.Close())
+		err = store1.Set(t.Context(), "test-key", []byte("test-value"), "yaml")
+		require.NoError(t, err)
+		require.NoError(t, store1.Close())
 
-	// open again - migration should be no-op
-	store2, err := New(dbPath)
-	require.NoError(t, err)
-	defer store2.Close()
+		// open again - migration should be no-op
+		store2, err := New(dbPath)
+		require.NoError(t, err)
+		defer store2.Close()
 
-	value, format, err := store2.GetWithFormat(t.Context(), "test-key")
-	require.NoError(t, err)
-	assert.Equal(t, []byte("test-value"), value)
-	assert.Equal(t, "yaml", format)
+		value, format, err := store2.GetWithFormat(t.Context(), "test-key")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("test-value"), value)
+		assert.Equal(t, "yaml", format)
+	})
 }
 
 func TestStore_SetWithVersion(t *testing.T) {
-	store := newTestStore(t)
-	defer store.Close()
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine)
 
-	t.Run("success when version matches", func(t *testing.T) {
-		err := store.Set(t.Context(), "versioned", []byte("initial"), "text")
-		require.NoError(t, err)
+			t.Run("success when version matches", func(t *testing.T) {
+				err := store.Set(t.Context(), "ver/versioned", []byte("initial"), "text")
+				require.NoError(t, err)
 
-		info, err := store.GetInfo(t.Context(), "versioned")
-		require.NoError(t, err)
+				info, err := store.GetInfo(t.Context(), "ver/versioned")
+				require.NoError(t, err)
 
-		// update with matching version
-		err = store.SetWithVersion(t.Context(), "versioned", []byte("updated"), "json", info.UpdatedAt)
-		require.NoError(t, err)
+				// update with matching version
+				err = store.SetWithVersion(t.Context(), "ver/versioned", []byte("updated"), "json", info.UpdatedAt)
+				require.NoError(t, err)
 
-		// verify update succeeded
-		value, format, err := store.GetWithFormat(t.Context(), "versioned")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("updated"), value)
-		assert.Equal(t, "json", format)
-	})
+				// verify update succeeded
+				value, format, err := store.GetWithFormat(t.Context(), "ver/versioned")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("updated"), value)
+				assert.Equal(t, "json", format)
+			})
 
-	t.Run("conflict when version mismatch", func(t *testing.T) {
-		err := store.Set(t.Context(), "conflict-key", []byte("original"), "text")
-		require.NoError(t, err)
+			t.Run("conflict when version mismatch", func(t *testing.T) {
+				err := store.Set(t.Context(), "ver/conflict-key", []byte("original"), "text")
+				require.NoError(t, err)
 
-		// get initial version
-		info1, err := store.GetInfo(t.Context(), "conflict-key")
-		require.NoError(t, err)
+				// get initial version
+				info1, err := store.GetInfo(t.Context(), "ver/conflict-key")
+				require.NoError(t, err)
 
-		// simulate concurrent update
-		time.Sleep(1100 * time.Millisecond) // ensure timestamp changes
-		err = store.Set(t.Context(), "conflict-key", []byte("concurrent-update"), "yaml")
-		require.NoError(t, err)
+				// simulate concurrent update
+				time.Sleep(1100 * time.Millisecond) // ensure timestamp changes
+				err = store.Set(t.Context(), "ver/conflict-key", []byte("concurrent-update"), "yaml")
+				require.NoError(t, err)
 
-		// try to update with old version
-		err = store.SetWithVersion(t.Context(), "conflict-key", []byte("my-update"), "json", info1.UpdatedAt)
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrConflict)
+				// try to update with old version
+				err = store.SetWithVersion(t.Context(), "ver/conflict-key", []byte("my-update"), "json", info1.UpdatedAt)
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrConflict)
 
-		// verify ConflictError has correct details
-		var conflictErr *ConflictError
-		require.ErrorAs(t, err, &conflictErr)
-		assert.Equal(t, []byte("concurrent-update"), conflictErr.Info.CurrentValue)
-		assert.Equal(t, "yaml", conflictErr.Info.CurrentFormat)
-		assert.True(t, conflictErr.Info.CurrentVersion.After(info1.UpdatedAt))
-		assert.Equal(t, info1.UpdatedAt, conflictErr.Info.AttemptedVersion)
-	})
+				// verify ConflictError has correct details
+				var conflictErr *ConflictError
+				require.ErrorAs(t, err, &conflictErr)
+				assert.Equal(t, []byte("concurrent-update"), conflictErr.Info.CurrentValue)
+				assert.Equal(t, "yaml", conflictErr.Info.CurrentFormat)
+				assert.True(t, conflictErr.Info.CurrentVersion.After(info1.UpdatedAt))
+				assert.Equal(t, info1.UpdatedAt, conflictErr.Info.AttemptedVersion)
+			})
 
-	t.Run("not found when key deleted", func(t *testing.T) {
-		err := store.Set(t.Context(), "to-delete", []byte("value"), "text")
-		require.NoError(t, err)
+			t.Run("not found when key deleted", func(t *testing.T) {
+				err := store.Set(t.Context(), "ver/to-delete", []byte("value"), "text")
+				require.NoError(t, err)
 
-		info, err := store.GetInfo(t.Context(), "to-delete")
-		require.NoError(t, err)
+				info, err := store.GetInfo(t.Context(), "ver/to-delete")
+				require.NoError(t, err)
 
-		// delete the key
-		err = store.Delete(t.Context(), "to-delete")
-		require.NoError(t, err)
+				// delete the key
+				err = store.Delete(t.Context(), "ver/to-delete")
+				require.NoError(t, err)
 
-		// try to update deleted key
-		err = store.SetWithVersion(t.Context(), "to-delete", []byte("update"), "text", info.UpdatedAt)
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+				// try to update deleted key
+				err = store.SetWithVersion(t.Context(), "ver/to-delete", []byte("update"), "text", info.UpdatedAt)
+				require.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("zero time behaves like regular set", func(t *testing.T) {
-		// create new key with zero time
-		err := store.SetWithVersion(t.Context(), "zero-time", []byte("value1"), "text", time.Time{})
-		require.NoError(t, err)
+			t.Run("zero time behaves like regular set", func(t *testing.T) {
+				// create new key with zero time
+				err := store.SetWithVersion(t.Context(), "ver/zero-time", []byte("value1"), "text", time.Time{})
+				require.NoError(t, err)
 
-		value, err := store.Get(t.Context(), "zero-time")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("value1"), value)
+				value, err := store.Get(t.Context(), "ver/zero-time")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("value1"), value)
 
-		// update with zero time (no version check)
-		err = store.SetWithVersion(t.Context(), "zero-time", []byte("value2"), "json", time.Time{})
-		require.NoError(t, err)
+				// update with zero time (no version check)
+				err = store.SetWithVersion(t.Context(), "ver/zero-time", []byte("value2"), "json", time.Time{})
+				require.NoError(t, err)
 
-		value, format, err := store.GetWithFormat(t.Context(), "zero-time")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("value2"), value)
-		assert.Equal(t, "json", format)
-	})
+				value, format, err := store.GetWithFormat(t.Context(), "ver/zero-time")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("value2"), value)
+				assert.Equal(t, "json", format)
+			})
 
-	t.Run("empty format defaults to text", func(t *testing.T) {
-		err := store.Set(t.Context(), "empty-fmt", []byte("val"), "text")
-		require.NoError(t, err)
+			t.Run("empty format defaults to text", func(t *testing.T) {
+				err := store.Set(t.Context(), "ver/empty-fmt", []byte("val"), "text")
+				require.NoError(t, err)
 
-		info, err := store.GetInfo(t.Context(), "empty-fmt")
-		require.NoError(t, err)
+				info, err := store.GetInfo(t.Context(), "ver/empty-fmt")
+				require.NoError(t, err)
 
-		err = store.SetWithVersion(t.Context(), "empty-fmt", []byte("updated"), "", info.UpdatedAt)
-		require.NoError(t, err)
+				err = store.SetWithVersion(t.Context(), "ver/empty-fmt", []byte("updated"), "", info.UpdatedAt)
+				require.NoError(t, err)
 
-		_, format, err := store.GetWithFormat(t.Context(), "empty-fmt")
-		require.NoError(t, err)
-		assert.Equal(t, "text", format)
-	})
+				_, format, err := store.GetWithFormat(t.Context(), "ver/empty-fmt")
+				require.NoError(t, err)
+				assert.Equal(t, "text", format)
+			})
 
-	t.Run("works with unix nano timestamp round-trip", func(t *testing.T) {
-		// this test verifies that nanosecond-precision timestamps survive round-trip
-		// through UnixNano() -> time.Unix(0, nanos) conversion (used by web UI)
-		err := store.Set(t.Context(), "unix-roundtrip", []byte("initial"), "text")
-		require.NoError(t, err)
+			t.Run("works with unix nano timestamp round-trip", func(t *testing.T) {
+				// this test verifies that nanosecond-precision timestamps survive round-trip
+				// through UnixNano() -> time.Unix(0, nanos) conversion (used by web UI)
+				err := store.Set(t.Context(), "ver/unix-roundtrip", []byte("initial"), "text")
+				require.NoError(t, err)
 
-		info, err := store.GetInfo(t.Context(), "unix-roundtrip")
-		require.NoError(t, err)
+				info, err := store.GetInfo(t.Context(), "ver/unix-roundtrip")
+				require.NoError(t, err)
 
-		// simulate form round-trip: convert to unix nanos and back (preserves precision)
-		unixNanos := info.UpdatedAt.UnixNano()
-		reconstructed := time.Unix(0, unixNanos).UTC()
+				// simulate form round-trip: convert to unix nanos and back (preserves precision)
+				unixNanos := info.UpdatedAt.UnixNano()
+				reconstructed := time.Unix(0, unixNanos).UTC()
 
-		// update with reconstructed timestamp should succeed
-		err = store.SetWithVersion(t.Context(), "unix-roundtrip", []byte("updated"), "json", reconstructed)
-		require.NoError(t, err, "update with unix-nano-reconstructed timestamp should succeed")
+				// update with reconstructed timestamp should succeed
+				err = store.SetWithVersion(t.Context(), "ver/unix-roundtrip", []byte("updated"), "json", reconstructed)
+				require.NoError(t, err, "update with unix-nano-reconstructed timestamp should succeed")
 
-		// verify update worked
-		value, format, err := store.GetWithFormat(t.Context(), "unix-roundtrip")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("updated"), value)
-		assert.Equal(t, "json", format)
-	})
+				// verify update worked
+				value, format, err := store.GetWithFormat(t.Context(), "ver/unix-roundtrip")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("updated"), value)
+				assert.Equal(t, "json", format)
+			})
+		})
+	}
 }
 
-func TestSQLite_Session(t *testing.T) {
-	store := newTestStore(t)
-	ctx := t.Context()
+func TestStore_Session(t *testing.T) {
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine)
+			ctx := t.Context()
+			prefix := "sess/" + engine + "/"
 
-	t.Run("create and get session", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-		err := store.CreateSession(ctx, "token1", "user1", expires)
-		require.NoError(t, err)
+			t.Run("create and get session", func(t *testing.T) {
+				expires := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+				err := store.CreateSession(ctx, prefix+"token1", "user1", expires)
+				require.NoError(t, err)
 
-		username, expiresAt, err := store.GetSession(ctx, "token1")
-		require.NoError(t, err)
-		assert.Equal(t, "user1", username)
-		assert.Equal(t, expires.Unix(), expiresAt.Unix())
-	})
+				username, expiresAt, err := store.GetSession(ctx, prefix+"token1")
+				require.NoError(t, err)
+				assert.Equal(t, "user1", username)
+				assert.Equal(t, expires.Unix(), expiresAt.Unix())
+			})
 
-	t.Run("get nonexistent session", func(t *testing.T) {
-		_, _, err := store.GetSession(ctx, "nonexistent")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+			t.Run("get nonexistent session", func(t *testing.T) {
+				_, _, err := store.GetSession(ctx, prefix+"nonexistent")
+				require.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("delete session", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC()
-		err := store.CreateSession(ctx, "token-delete", "user", expires)
-		require.NoError(t, err)
+			t.Run("delete session", func(t *testing.T) {
+				expires := time.Now().Add(time.Hour).UTC()
+				err := store.CreateSession(ctx, prefix+"token-delete", "user", expires)
+				require.NoError(t, err)
 
-		err = store.DeleteSession(ctx, "token-delete")
-		require.NoError(t, err)
+				err = store.DeleteSession(ctx, prefix+"token-delete")
+				require.NoError(t, err)
 
-		_, _, err = store.GetSession(ctx, "token-delete")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+				_, _, err = store.GetSession(ctx, prefix+"token-delete")
+				require.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("delete all sessions", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC()
-		_ = store.CreateSession(ctx, "token-a", "user", expires)
-		_ = store.CreateSession(ctx, "token-b", "user", expires)
+			t.Run("delete all sessions", func(t *testing.T) {
+				expires := time.Now().Add(time.Hour).UTC()
+				err := store.CreateSession(ctx, prefix+"token-a", "user", expires)
+				require.NoError(t, err)
+				err = store.CreateSession(ctx, prefix+"token-b", "user", expires)
+				require.NoError(t, err)
 
-		err := store.DeleteAllSessions(ctx)
-		require.NoError(t, err)
+				err = store.DeleteAllSessions(ctx)
+				require.NoError(t, err)
 
-		_, _, err = store.GetSession(ctx, "token-a")
-		require.ErrorIs(t, err, ErrNotFound)
-		_, _, err = store.GetSession(ctx, "token-b")
-		require.ErrorIs(t, err, ErrNotFound)
-	})
+				_, _, err = store.GetSession(ctx, prefix+"token-a")
+				require.ErrorIs(t, err, ErrNotFound)
+				_, _, err = store.GetSession(ctx, prefix+"token-b")
+				require.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("delete expired sessions", func(t *testing.T) {
-		// create expired session
-		expired := time.Now().Add(-time.Hour).UTC()
-		_ = store.CreateSession(ctx, "expired-token", "user", expired)
+			t.Run("delete expired sessions", func(t *testing.T) {
+				// create expired session
+				expired := time.Now().Add(-time.Hour).UTC()
+				err := store.CreateSession(ctx, prefix+"expired-token", "user", expired)
+				require.NoError(t, err)
 
-		// create valid session
-		valid := time.Now().Add(time.Hour).UTC()
-		_ = store.CreateSession(ctx, "valid-token", "user", valid)
+				// create valid session
+				valid := time.Now().Add(time.Hour).UTC()
+				err = store.CreateSession(ctx, prefix+"valid-token", "user", valid)
+				require.NoError(t, err)
 
-		deleted, err := store.DeleteExpiredSessions(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), deleted)
+				deleted, err := store.DeleteExpiredSessions(ctx)
+				require.NoError(t, err)
+				assert.Positive(t, deleted)
 
-		// expired should be gone
-		_, _, err = store.GetSession(ctx, "expired-token")
-		require.ErrorIs(t, err, ErrNotFound)
+				// expired should be gone
+				_, _, err = store.GetSession(ctx, prefix+"expired-token")
+				require.ErrorIs(t, err, ErrNotFound)
 
-		// valid should remain
-		_, _, err = store.GetSession(ctx, "valid-token")
-		require.NoError(t, err)
-	})
+				// valid should remain
+				_, _, err = store.GetSession(ctx, prefix+"valid-token")
+				require.NoError(t, err)
+			})
 
-	t.Run("duplicate token replaces session", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC()
-		err := store.CreateSession(ctx, "dup-token", "user1", expires)
-		require.NoError(t, err)
+			t.Run("duplicate token replaces session", func(t *testing.T) {
+				expires := time.Now().Add(time.Hour).UTC()
+				err := store.CreateSession(ctx, prefix+"dup-token", "user1", expires)
+				require.NoError(t, err)
 
-		err = store.CreateSession(ctx, "dup-token", "user2", expires)
-		require.NoError(t, err)
+				err = store.CreateSession(ctx, prefix+"dup-token", "user2", expires)
+				require.NoError(t, err)
 
-		username, _, err := store.GetSession(ctx, "dup-token")
-		require.NoError(t, err)
-		assert.Equal(t, "user2", username)
-	})
+				username, _, err := store.GetSession(ctx, prefix+"dup-token")
+				require.NoError(t, err)
+				assert.Equal(t, "user2", username)
+			})
 
-	t.Run("session expiration respects UTC timezone", func(t *testing.T) {
-		// store session with explicit UTC time
-		expires := time.Now().Add(30 * time.Minute).UTC().Truncate(time.Second)
-		err := store.CreateSession(ctx, "tz-token", "tzuser", expires)
-		require.NoError(t, err)
+			t.Run("session expiration respects UTC timezone", func(t *testing.T) {
+				// store session with explicit UTC time
+				expires := time.Now().Add(30 * time.Minute).UTC().Truncate(time.Second)
+				err := store.CreateSession(ctx, prefix+"tz-token", "tzuser", expires)
+				require.NoError(t, err)
 
-		// retrieve and verify UTC is preserved
-		username, expiresAt, err := store.GetSession(ctx, "tz-token")
-		require.NoError(t, err)
-		assert.Equal(t, "tzuser", username)
+				// retrieve and verify UTC is preserved
+				username, expiresAt, err := store.GetSession(ctx, prefix+"tz-token")
+				require.NoError(t, err)
+				assert.Equal(t, "tzuser", username)
 
-		// verify the time instant matches (same point in time)
-		assert.Equal(t, expires.Unix(), expiresAt.Unix(), "expiration instant should match")
+				// verify the time instant matches (same point in time)
+				assert.Equal(t, expires.Unix(), expiresAt.Unix(), "expiration instant should match")
 
-		// verify the returned time is in UTC location
-		assert.Equal(t, "UTC", expiresAt.Location().String(), "returned time should be in UTC")
-	})
+				// verify the returned time is in UTC location
+				assert.Equal(t, "UTC", expiresAt.Location().String(), "returned time should be in UTC")
+			})
 
-	t.Run("delete sessions by username", func(t *testing.T) {
-		expires := time.Now().Add(time.Hour).UTC()
-		// create sessions for different users
-		err := store.CreateSession(ctx, "token-alice-1", "alice", expires)
-		require.NoError(t, err)
-		err = store.CreateSession(ctx, "token-alice-2", "alice", expires)
-		require.NoError(t, err)
-		err = store.CreateSession(ctx, "token-bob-1", "bob", expires)
-		require.NoError(t, err)
+			t.Run("delete sessions by username", func(t *testing.T) {
+				expires := time.Now().Add(time.Hour).UTC()
+				aliceUser := prefix + "alice"
+				bobUser := prefix + "bob"
+				// create sessions for different users
+				err := store.CreateSession(ctx, prefix+"token-alice-1", aliceUser, expires)
+				require.NoError(t, err)
+				err = store.CreateSession(ctx, prefix+"token-alice-2", aliceUser, expires)
+				require.NoError(t, err)
+				err = store.CreateSession(ctx, prefix+"token-bob-1", bobUser, expires)
+				require.NoError(t, err)
 
-		// delete alice's sessions only
-		err = store.DeleteSessionsByUsername(ctx, "alice")
-		require.NoError(t, err)
+				// delete alice's sessions only
+				err = store.DeleteSessionsByUsername(ctx, aliceUser)
+				require.NoError(t, err)
 
-		// alice's sessions should be gone
-		_, _, err = store.GetSession(ctx, "token-alice-1")
-		require.ErrorIs(t, err, ErrNotFound)
-		_, _, err = store.GetSession(ctx, "token-alice-2")
-		require.ErrorIs(t, err, ErrNotFound)
+				// alice's sessions should be gone
+				_, _, err = store.GetSession(ctx, prefix+"token-alice-1")
+				require.ErrorIs(t, err, ErrNotFound)
+				_, _, err = store.GetSession(ctx, prefix+"token-alice-2")
+				require.ErrorIs(t, err, ErrNotFound)
 
-		// bob's session should remain
-		username, _, err := store.GetSession(ctx, "token-bob-1")
-		require.NoError(t, err)
-		assert.Equal(t, "bob", username)
-	})
+				// bob's session should remain
+				username, _, err := store.GetSession(ctx, prefix+"token-bob-1")
+				require.NoError(t, err)
+				assert.Equal(t, bobUser, username)
+			})
 
-	t.Run("delete sessions by username - no sessions", func(t *testing.T) {
-		// should not error when user has no sessions
-		err := store.DeleteSessionsByUsername(ctx, "nonexistent-user")
-		require.NoError(t, err)
-	})
+			t.Run("delete sessions by username - no sessions", func(t *testing.T) {
+				// should not error when user has no sessions
+				err := store.DeleteSessionsByUsername(ctx, prefix+"nonexistent-user")
+				require.NoError(t, err)
+			})
+		})
+	}
 }
 
 // secrets tests
 
-func newTestStoreWithEncryptor(t *testing.T) *Store {
+func newTestStoreWithEncryptor(t *testing.T, engine string) *Store {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
 	enc, err := NewCrypto([]byte("test-secret-key-1234"))
 	require.NoError(t, err)
-	store, err := New(dbPath, WithEncryptor(enc))
-	require.NoError(t, err)
-	return store
+	return newTestStore(t, engine, WithEncryptor(enc))
 }
 
 func TestStore_SecretsEnabled(t *testing.T) {
-	t.Run("false when no encryptor", func(t *testing.T) {
-		store := newTestStore(t)
-		defer store.Close()
-		assert.False(t, store.SecretsEnabled())
-	})
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			t.Run("false when no encryptor", func(t *testing.T) {
+				store := newTestStore(t, engine)
+				assert.False(t, store.SecretsEnabled())
+			})
 
-	t.Run("true when encryptor set", func(t *testing.T) {
-		store := newTestStoreWithEncryptor(t)
-		defer store.Close()
-		assert.True(t, store.SecretsEnabled())
-	})
+			t.Run("true when encryptor set", func(t *testing.T) {
+				store := newTestStoreWithEncryptor(t, engine)
+				assert.True(t, store.SecretsEnabled())
+			})
+		})
+	}
 }
 
 func TestStore_Secrets_CRUD(t *testing.T) {
-	store := newTestStoreWithEncryptor(t)
-	defer store.Close()
-	ctx := t.Context()
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStoreWithEncryptor(t, engine)
+			ctx := t.Context()
+			prefix := "sec/crud/" + engine + "/"
 
-	t.Run("set and get secret", func(t *testing.T) {
-		err := store.Set(ctx, "secrets/db/password", []byte("super-secret"), "text")
-		require.NoError(t, err)
+			t.Run("set and get secret", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"secrets/db/password", []byte("super-secret"), "text")
+				require.NoError(t, err)
 
-		value, err := store.Get(ctx, "secrets/db/password")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("super-secret"), value)
-	})
+				value, err := store.Get(ctx, prefix+"secrets/db/password")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("super-secret"), value)
+			})
 
-	t.Run("set and get secret with format", func(t *testing.T) {
-		err := store.Set(ctx, "app/secrets/config", []byte(`{"key":"secret"}`), "json")
-		require.NoError(t, err)
+			t.Run("set and get secret with format", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"app/secrets/config", []byte(`{"key":"secret"}`), "json")
+				require.NoError(t, err)
 
-		value, format, err := store.GetWithFormat(ctx, "app/secrets/config")
-		require.NoError(t, err)
-		assert.JSONEq(t, `{"key":"secret"}`, string(value))
-		assert.Equal(t, "json", format)
-	})
+				value, format, err := store.GetWithFormat(ctx, prefix+"app/secrets/config")
+				require.NoError(t, err)
+				assert.JSONEq(t, `{"key":"secret"}`, string(value))
+				assert.Equal(t, "json", format)
+			})
 
-	t.Run("update secret", func(t *testing.T) {
-		err := store.Set(ctx, "secrets/update-test", []byte("original"), "text")
-		require.NoError(t, err)
+			t.Run("update secret", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"secrets/update-test", []byte("original"), "text")
+				require.NoError(t, err)
 
-		err = store.Set(ctx, "secrets/update-test", []byte("updated"), "text")
-		require.NoError(t, err)
+				err = store.Set(ctx, prefix+"secrets/update-test", []byte("updated"), "text")
+				require.NoError(t, err)
 
-		value, err := store.Get(ctx, "secrets/update-test")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("updated"), value)
-	})
+				value, err := store.Get(ctx, prefix+"secrets/update-test")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("updated"), value)
+			})
 
-	t.Run("delete secret", func(t *testing.T) {
-		err := store.Set(ctx, "secrets/delete-test", []byte("to-delete"), "text")
-		require.NoError(t, err)
+			t.Run("delete secret", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"secrets/delete-test", []byte("to-delete"), "text")
+				require.NoError(t, err)
 
-		err = store.Delete(ctx, "secrets/delete-test")
-		require.NoError(t, err)
+				err = store.Delete(ctx, prefix+"secrets/delete-test")
+				require.NoError(t, err)
 
-		_, err = store.Get(ctx, "secrets/delete-test")
-		assert.ErrorIs(t, err, ErrNotFound)
-	})
+				_, err = store.Get(ctx, prefix+"secrets/delete-test")
+				assert.ErrorIs(t, err, ErrNotFound)
+			})
 
-	t.Run("get info for secret", func(t *testing.T) {
-		err := store.Set(ctx, "secrets/info-test", []byte("test-value"), "yaml")
-		require.NoError(t, err)
+			t.Run("get info for secret", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"secrets/info-test", []byte("test-value"), "yaml")
+				require.NoError(t, err)
 
-		info, err := store.GetInfo(ctx, "secrets/info-test")
-		require.NoError(t, err)
-		assert.Equal(t, "secrets/info-test", info.Key)
-		assert.Equal(t, "yaml", info.Format)
-		assert.True(t, info.Secret, "secret flag should be true")
-		assert.Positive(t, info.Size) // encrypted size is larger than plaintext
-	})
+				info, err := store.GetInfo(ctx, prefix+"secrets/info-test")
+				require.NoError(t, err)
+				assert.Equal(t, prefix+"secrets/info-test", info.Key)
+				assert.Equal(t, "yaml", info.Format)
+				assert.True(t, info.Secret, "secret flag should be true")
+				assert.Positive(t, info.Size) // encrypted size is larger than plaintext
+			})
 
-	t.Run("get info for non-secret", func(t *testing.T) {
-		err := store.Set(ctx, "config/database", []byte("test"), "text")
-		require.NoError(t, err)
+			t.Run("get info for non-secret", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"config/database", []byte("test"), "text")
+				require.NoError(t, err)
 
-		info, err := store.GetInfo(ctx, "config/database")
-		require.NoError(t, err)
-		assert.Equal(t, "config/database", info.Key)
-		assert.False(t, info.Secret, "secret flag should be false")
-	})
+				info, err := store.GetInfo(ctx, prefix+"config/database")
+				require.NoError(t, err)
+				assert.Equal(t, prefix+"config/database", info.Key)
+				assert.False(t, info.Secret, "secret flag should be false")
+			})
 
-	t.Run("secret value is encrypted in database", func(t *testing.T) {
-		secretValue := []byte("plaintext-secret")
-		err := store.Set(ctx, "secrets/encrypted-check", secretValue, "text")
-		require.NoError(t, err)
+			t.Run("secret value is encrypted in database", func(t *testing.T) {
+				secretValue := []byte("plaintext-secret")
+				key := prefix + "secrets/encrypted-check"
+				err := store.Set(ctx, key, secretValue, "text")
+				require.NoError(t, err)
 
-		// read raw value from database
-		var rawValue []byte
-		err = store.db.Get(&rawValue, "SELECT value FROM kv WHERE key = ?", "secrets/encrypted-check")
-		require.NoError(t, err)
+				// read raw value from database
+				var rawValue []byte
+				err = store.db.Get(&rawValue, store.adoptQuery("SELECT value FROM kv WHERE key = ?"), key)
+				require.NoError(t, err)
 
-		// raw value should not equal plaintext
-		assert.NotEqual(t, secretValue, rawValue, "stored value should be encrypted")
+				// raw value should not equal plaintext
+				assert.NotEqual(t, secretValue, rawValue, "stored value should be encrypted")
 
-		// but Get should return decrypted value
-		decrypted, err := store.Get(ctx, "secrets/encrypted-check")
-		require.NoError(t, err)
-		assert.Equal(t, secretValue, decrypted)
-	})
+				// but Get should return decrypted value
+				decrypted, err := store.Get(ctx, key)
+				require.NoError(t, err)
+				assert.Equal(t, secretValue, decrypted)
+			})
 
-	t.Run("regular key is not encrypted", func(t *testing.T) {
-		regularValue := []byte("regular-value")
-		err := store.Set(ctx, "config/regular", regularValue, "text")
-		require.NoError(t, err)
+			t.Run("regular key is not encrypted", func(t *testing.T) {
+				regularValue := []byte("regular-value")
+				key := prefix + "config/regular"
+				err := store.Set(ctx, key, regularValue, "text")
+				require.NoError(t, err)
 
-		// read raw value from database
-		var rawValue []byte
-		err = store.db.Get(&rawValue, "SELECT value FROM kv WHERE key = ?", "config/regular")
-		require.NoError(t, err)
+				// read raw value from database
+				var rawValue []byte
+				err = store.db.Get(&rawValue, store.adoptQuery("SELECT value FROM kv WHERE key = ?"), key)
+				require.NoError(t, err)
 
-		// raw value should equal plaintext
-		assert.Equal(t, regularValue, rawValue, "regular value should not be encrypted")
-	})
+				// raw value should equal plaintext
+				assert.Equal(t, regularValue, rawValue, "regular value should not be encrypted")
+			})
+		})
+	}
 }
 
 func TestStore_Secrets_WithoutEncryptor(t *testing.T) {
-	store := newTestStore(t) // no encryptor
-	defer store.Close()
-	ctx := t.Context()
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStore(t, engine) // no encryptor
+			ctx := t.Context()
+			prefix := "sec/noenc/" + engine + "/"
 
-	t.Run("set secret returns error", func(t *testing.T) {
-		err := store.Set(ctx, "secrets/test", []byte("value"), "text")
-		assert.ErrorIs(t, err, ErrSecretsNotConfigured)
-	})
+			t.Run("set secret returns error", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"secrets/test", []byte("value"), "text")
+				assert.ErrorIs(t, err, ErrSecretsNotConfigured)
+			})
 
-	t.Run("get secret returns error", func(t *testing.T) {
-		_, err := store.Get(ctx, "secrets/test")
-		assert.ErrorIs(t, err, ErrSecretsNotConfigured)
-	})
+			t.Run("get secret returns error", func(t *testing.T) {
+				_, err := store.Get(ctx, prefix+"secrets/test")
+				assert.ErrorIs(t, err, ErrSecretsNotConfigured)
+			})
 
-	t.Run("get secret with format returns error", func(t *testing.T) {
-		_, _, err := store.GetWithFormat(ctx, "secrets/test")
-		assert.ErrorIs(t, err, ErrSecretsNotConfigured)
-	})
+			t.Run("get secret with format returns error", func(t *testing.T) {
+				_, _, err := store.GetWithFormat(ctx, prefix+"secrets/test")
+				assert.ErrorIs(t, err, ErrSecretsNotConfigured)
+			})
 
-	t.Run("regular keys work without encryptor", func(t *testing.T) {
-		err := store.Set(ctx, "config/regular", []byte("value"), "text")
-		require.NoError(t, err)
+			t.Run("regular keys work without encryptor", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"config/regular", []byte("value"), "text")
+				require.NoError(t, err)
 
-		value, err := store.Get(ctx, "config/regular")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("value"), value)
-	})
+				value, err := store.Get(ctx, prefix+"config/regular")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("value"), value)
+			})
 
-	t.Run("get info for secret returns error", func(t *testing.T) {
-		_, err := store.GetInfo(ctx, "secrets/test")
-		assert.ErrorIs(t, err, ErrSecretsNotConfigured)
-	})
+			t.Run("get info for secret returns error", func(t *testing.T) {
+				_, err := store.GetInfo(ctx, prefix+"secrets/test")
+				assert.ErrorIs(t, err, ErrSecretsNotConfigured)
+			})
 
-	t.Run("delete secret works without encryptor", func(t *testing.T) {
-		// delete doesn't require decryption, so it should work even without encryptor
-		// first verify the key doesn't exist
-		err := store.Delete(ctx, "secrets/nonexistent")
-		assert.ErrorIs(t, err, ErrNotFound)
-	})
+			t.Run("delete secret works without encryptor", func(t *testing.T) {
+				// delete doesn't require decryption, so it should work even without encryptor
+				// first verify the key doesn't exist
+				err := store.Delete(ctx, prefix+"secrets/nonexistent")
+				assert.ErrorIs(t, err, ErrNotFound)
+			})
+		})
+	}
 }
 
 func TestStore_Secrets_ListFilter(t *testing.T) {
-	store := newTestStoreWithEncryptor(t)
-	defer store.Close()
-	ctx := t.Context()
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStoreWithEncryptor(t, engine)
+			ctx := t.Context()
+			prefix := "sec/filter/" + engine + "/"
 
-	// create mix of secret and regular keys
-	require.NoError(t, store.Set(ctx, "config/db", []byte("v1"), "text"))
-	require.NoError(t, store.Set(ctx, "config/app", []byte("v2"), "text"))
-	require.NoError(t, store.Set(ctx, "secrets/db/password", []byte("s1"), "text"))
-	require.NoError(t, store.Set(ctx, "app/secrets/key", []byte("s2"), "text"))
+			// create mix of secret and regular keys
+			require.NoError(t, store.Set(ctx, prefix+"config/db", []byte("v1"), "text"))
+			require.NoError(t, store.Set(ctx, prefix+"config/app", []byte("v2"), "text"))
+			require.NoError(t, store.Set(ctx, prefix+"secrets/db/password", []byte("s1"), "text"))
+			require.NoError(t, store.Set(ctx, prefix+"app/secrets/key", []byte("s2"), "text"))
 
-	t.Run("list all keys", func(t *testing.T) {
-		keys, err := store.List(ctx, enum.SecretsFilterAll)
-		require.NoError(t, err)
-		assert.Len(t, keys, 4)
+			t.Run("list all keys", func(t *testing.T) {
+				keys, err := store.List(ctx, enum.SecretsFilterAll)
+				require.NoError(t, err)
 
-		// verify secret flags are set correctly
-		secretCount := 0
-		for _, k := range keys {
-			if k.Secret {
-				secretCount++
-			}
-		}
-		assert.Equal(t, 2, secretCount)
-	})
+				// count our keys only (postgres may have keys from other tests)
+				var ourKeys, secretCount int
+				for _, k := range keys {
+					if len(k.Key) > len(prefix) && k.Key[:len(prefix)] == prefix {
+						ourKeys++
+						if k.Secret {
+							secretCount++
+						}
+					}
+				}
+				assert.Equal(t, 4, ourKeys)
+				assert.Equal(t, 2, secretCount)
+			})
 
-	t.Run("list only secrets", func(t *testing.T) {
-		keys, err := store.List(ctx, enum.SecretsFilterSecretsOnly)
-		require.NoError(t, err)
-		assert.Len(t, keys, 2)
-		for _, k := range keys {
-			assert.True(t, k.Secret, "all keys should be secrets")
-			assert.True(t, IsSecret(k.Key), "key path should match secret pattern")
-		}
-	})
+			t.Run("list only secrets", func(t *testing.T) {
+				keys, err := store.List(ctx, enum.SecretsFilterSecretsOnly)
+				require.NoError(t, err)
 
-	t.Run("list only non-secrets", func(t *testing.T) {
-		keys, err := store.List(ctx, enum.SecretsFilterKeysOnly)
-		require.NoError(t, err)
-		assert.Len(t, keys, 2)
-		for _, k := range keys {
-			assert.False(t, k.Secret, "all keys should be non-secrets")
-			assert.False(t, IsSecret(k.Key), "key path should not match secret pattern")
-		}
-	})
+				// count our secret keys
+				var ourSecrets int
+				for _, k := range keys {
+					if len(k.Key) > len(prefix) && k.Key[:len(prefix)] == prefix {
+						ourSecrets++
+						assert.True(t, k.Secret, "all keys should be secrets")
+						assert.True(t, IsSecret(k.Key), "key path should match secret pattern")
+					}
+				}
+				assert.Equal(t, 2, ourSecrets)
+			})
+
+			t.Run("list only non-secrets", func(t *testing.T) {
+				keys, err := store.List(ctx, enum.SecretsFilterKeysOnly)
+				require.NoError(t, err)
+
+				// count our non-secret keys
+				var ourKeys int
+				for _, k := range keys {
+					if len(k.Key) > len(prefix) && k.Key[:len(prefix)] == prefix {
+						ourKeys++
+						assert.False(t, k.Secret, "all keys should be non-secrets")
+						assert.False(t, IsSecret(k.Key), "key path should not match secret pattern")
+					}
+				}
+				assert.Equal(t, 2, ourKeys)
+			})
+		})
+	}
 }
 
 func TestStore_Secrets_SetWithVersion(t *testing.T) {
-	store := newTestStoreWithEncryptor(t)
-	defer store.Close()
-	ctx := t.Context()
+	for _, engine := range testEngines {
+		t.Run(engine, func(t *testing.T) {
+			store := newTestStoreWithEncryptor(t, engine)
+			ctx := t.Context()
+			prefix := "sec/ver/" + engine + "/"
 
-	t.Run("update secret with correct version", func(t *testing.T) {
-		err := store.Set(ctx, "secrets/versioned", []byte("v1"), "text")
-		require.NoError(t, err)
+			t.Run("update secret with correct version", func(t *testing.T) {
+				err := store.Set(ctx, prefix+"secrets/versioned", []byte("v1"), "text")
+				require.NoError(t, err)
 
-		info, err := store.GetInfo(ctx, "secrets/versioned")
-		require.NoError(t, err)
+				info, err := store.GetInfo(ctx, prefix+"secrets/versioned")
+				require.NoError(t, err)
 
-		err = store.SetWithVersion(ctx, "secrets/versioned", []byte("v2"), "text", info.UpdatedAt)
-		require.NoError(t, err)
+				err = store.SetWithVersion(ctx, prefix+"secrets/versioned", []byte("v2"), "text", info.UpdatedAt)
+				require.NoError(t, err)
 
-		value, err := store.Get(ctx, "secrets/versioned")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("v2"), value)
-	})
+				value, err := store.Get(ctx, prefix+"secrets/versioned")
+				require.NoError(t, err)
+				assert.Equal(t, []byte("v2"), value)
+			})
 
-	t.Run("update secret without encryptor returns error", func(t *testing.T) {
-		storeNoEnc := newTestStore(t)
-		defer storeNoEnc.Close()
+			t.Run("update secret without encryptor returns error", func(t *testing.T) {
+				storeNoEnc := newTestStore(t, engine)
 
-		err := storeNoEnc.SetWithVersion(ctx, "secrets/test", []byte("v"), "text", time.Now())
-		assert.ErrorIs(t, err, ErrSecretsNotConfigured)
-	})
+				err := storeNoEnc.SetWithVersion(ctx, prefix+"secrets/test", []byte("v"), "text", time.Now())
+				assert.ErrorIs(t, err, ErrSecretsNotConfigured)
+			})
 
-	t.Run("conflict returns decrypted secret value", func(t *testing.T) {
-		secretValue := "super-secret-password"
-		err := store.Set(ctx, "secrets/conflict-key", []byte(secretValue), "text")
-		require.NoError(t, err)
+			t.Run("conflict returns decrypted secret value", func(t *testing.T) {
+				secretValue := "super-secret-password"
+				key := prefix + "secrets/conflict-key"
+				err := store.Set(ctx, key, []byte(secretValue), "text")
+				require.NoError(t, err)
 
-		// get initial version
-		info1, err := store.GetInfo(ctx, "secrets/conflict-key")
-		require.NoError(t, err)
+				// get initial version
+				info1, err := store.GetInfo(ctx, key)
+				require.NoError(t, err)
 
-		// simulate concurrent update
-		time.Sleep(1100 * time.Millisecond) // ensure timestamp differs
-		concurrentValue := "concurrent-secret-value"
-		err = store.Set(ctx, "secrets/conflict-key", []byte(concurrentValue), "yaml")
-		require.NoError(t, err)
+				// simulate concurrent update
+				time.Sleep(1100 * time.Millisecond) // ensure timestamp differs
+				concurrentValue := "concurrent-secret-value"
+				err = store.Set(ctx, key, []byte(concurrentValue), "yaml")
+				require.NoError(t, err)
 
-		// try to update with old version - should get conflict
-		err = store.SetWithVersion(ctx, "secrets/conflict-key", []byte("my-attempt"), "json", info1.UpdatedAt)
-		require.ErrorIs(t, err, ErrConflict)
+				// try to update with old version - should get conflict
+				err = store.SetWithVersion(ctx, key, []byte("my-attempt"), "json", info1.UpdatedAt)
+				require.ErrorIs(t, err, ErrConflict)
 
-		// verify ConflictError returns decrypted value, not encrypted ciphertext
-		var conflictErr *ConflictError
-		require.ErrorAs(t, err, &conflictErr)
-		assert.Equal(t, []byte(concurrentValue), conflictErr.Info.CurrentValue,
-			"conflict error should contain decrypted secret value, not encrypted ciphertext")
-		assert.Equal(t, "yaml", conflictErr.Info.CurrentFormat)
-	})
+				// verify ConflictError returns decrypted value, not encrypted ciphertext
+				var conflictErr *ConflictError
+				require.ErrorAs(t, err, &conflictErr)
+				assert.Equal(t, []byte(concurrentValue), conflictErr.Info.CurrentValue,
+					"conflict error should contain decrypted secret value, not encrypted ciphertext")
+				assert.Equal(t, "yaml", conflictErr.Info.CurrentFormat)
+			})
+		})
+	}
 }

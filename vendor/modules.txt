@@ -204,6 +204,13 @@ github.com/cloudflare/circl/math/mlsbset
 github.com/cloudflare/circl/sign
 github.com/cloudflare/circl/sign/ed25519
 github.com/cloudflare/circl/sign/ed448
+# github.com/containerd/errdefs v1.0.0
+## explicit; go 1.20
+github.com/containerd/errdefs
+# github.com/containerd/errdefs/pkg v0.3.0
+## explicit; go 1.22
+github.com/containerd/errdefs/pkg/errhttp
+github.com/containerd/errdefs/pkg/internal/cause
 # github.com/containerd/log v0.1.0
 ## explicit; go 1.20
 github.com/containerd/log
@@ -240,11 +247,12 @@ github.com/distribution/reference
 ## explicit; go 1.13
 github.com/dlclark/regexp2
 github.com/dlclark/regexp2/syntax
-# github.com/docker/docker v28.1.1+incompatible
+# github.com/docker/docker v28.5.1+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
+github.com/docker/docker/api/types/build
 github.com/docker/docker/api/types/checkpoint
 github.com/docker/docker/api/types/common
 github.com/docker/docker/api/types/container
@@ -263,14 +271,9 @@ github.com/docker/docker/api/types/time
 github.com/docker/docker/api/types/versions
 github.com/docker/docker/api/types/volume
 github.com/docker/docker/client
-github.com/docker/docker/errdefs
-github.com/docker/docker/internal/lazyregexp
-github.com/docker/docker/internal/multierror
-github.com/docker/docker/pkg/archive
-github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/jsonmessage
 github.com/docker/docker/pkg/stdcopy
-# github.com/docker/go-connections v0.5.0
+# github.com/docker/go-connections v0.6.0
 ## explicit; go 1.18
 github.com/docker/go-connections/nat
 github.com/docker/go-connections/sockets
@@ -400,15 +403,12 @@ github.com/go-pkgz/rest/realip
 # github.com/go-pkgz/routegroup v1.6.0
 ## explicit; go 1.23
 github.com/go-pkgz/routegroup
-# github.com/go-pkgz/testutils v0.4.3
+# github.com/go-pkgz/testutils v0.5.0
 ## explicit; go 1.24
 github.com/go-pkgz/testutils/containers
 # github.com/go-stack/stack v1.8.1
 ## explicit; go 1.17
 github.com/go-stack/stack
-# github.com/gogo/protobuf v1.3.2
-## explicit; go 1.15
-github.com/gogo/protobuf/proto
 # github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
 ## explicit; go 1.20
 github.com/golang/groupcache/lru
@@ -526,8 +526,6 @@ github.com/moby/go-archive/tarheader
 ## explicit; go 1.19
 github.com/moby/patternmatcher
 github.com/moby/patternmatcher/ignorefile
-# github.com/moby/sys/atomicwriter v0.1.0
-## explicit; go 1.18
 # github.com/moby/sys/sequential v0.6.0
 ## explicit; go 1.17
 github.com/moby/sys/sequential
@@ -605,7 +603,7 @@ github.com/santhosh-tekuri/jsonschema/v5
 # github.com/sergi/go-diff v1.4.0
 ## explicit; go 1.13
 github.com/sergi/go-diff/diffmatchpatch
-# github.com/shirou/gopsutil/v4 v4.25.4
+# github.com/shirou/gopsutil/v4 v4.25.6
 ## explicit; go 1.23
 github.com/shirou/gopsutil/v4/common
 github.com/shirou/gopsutil/v4/cpu
@@ -624,8 +622,8 @@ github.com/skeema/knownhosts
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/assert/yaml
 github.com/stretchr/testify/require
-# github.com/testcontainers/testcontainers-go v0.37.0
-## explicit; go 1.23.0
+# github.com/testcontainers/testcontainers-go v0.40.0
+## explicit; go 1.24.0
 github.com/testcontainers/testcontainers-go
 github.com/testcontainers/testcontainers-go/exec
 github.com/testcontainers/testcontainers-go/internal
