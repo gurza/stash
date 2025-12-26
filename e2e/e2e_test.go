@@ -177,7 +177,9 @@ func createKey(t *testing.T, page playwright.Page, key, value string) {
 	waitVisible(t, submitBtn)
 	require.NoError(t, submitBtn.Click())
 
-	// wait for table to show the new key (positive signal that HTMX swap completed)
+	// wait for modal to close first (ensures HTMX request completed)
+	waitHidden(t, modal)
+	// then wait for table to show the new key (positive signal that HTMX swap completed)
 	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key)))
 }
 
@@ -196,7 +198,9 @@ func createKeyWithFormat(t *testing.T, page playwright.Page, key, value, format 
 	waitVisible(t, submitBtn)
 	require.NoError(t, submitBtn.Click())
 
-	// wait for table to show the new key (positive signal that HTMX swap completed)
+	// wait for modal to close first (ensures HTMX request completed)
+	waitHidden(t, modal)
+	// then wait for table to show the new key (positive signal that HTMX swap completed)
 	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key)))
 }
 
