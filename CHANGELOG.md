@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.16.0] - 2025-12-30
+
+### Added
+- Zero-knowledge client-side encryption for sensitive data (#47)
+  - Client library: `WithZKKey(passphrase)` option for automatic encrypt/decrypt
+  - Server stores opaque `$ZK$<base64>` blobs unchanged (server never sees plaintext)
+  - AES-256-GCM encryption with Argon2id key derivation
+  - Green shield icon and "Zero-Knowledge Encrypted" badge in web UI
+  - Edit disabled for ZK-encrypted keys (server cannot decrypt)
+
+### Changed
+- Dependencies: bump go-modules group with 3 updates (#46)
+
 ## [0.15.0] - 2025-12-24
 
 ### Added
