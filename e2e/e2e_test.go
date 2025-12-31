@@ -183,7 +183,9 @@ func login(t *testing.T, page playwright.Page, username, password string) { //no
 // createKey creates a new key via UI
 func createKey(t *testing.T, page playwright.Page, key, value string) {
 	t.Helper()
-	require.NoError(t, page.Locator(`button:has-text("New Key")`).Click())
+	newKeyBtn := page.Locator(`button:has-text("New Key")`)
+	waitVisible(t, newKeyBtn)
+	require.NoError(t, newKeyBtn.Click())
 	modal := page.Locator("#main-modal.active")
 	waitVisible(t, modal)
 
@@ -193,16 +195,17 @@ func createKey(t *testing.T, page playwright.Page, key, value string) {
 	waitVisible(t, submitBtn)
 	require.NoError(t, submitBtn.Click())
 
-	// wait for modal to close first (ensures HTMX request completed)
-	waitHidden(t, modal)
-	// then wait for table to show the new key (positive signal that HTMX swap completed)
+	// wait for table to show the new key (positive signal that HTMX swap completed)
+	// this is more reliable than waiting for modal to hide first
 	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key)))
 }
 
 // createKeyWithFormat creates a new key with specified format
 func createKeyWithFormat(t *testing.T, page playwright.Page, key, value, format string) {
 	t.Helper()
-	require.NoError(t, page.Locator(`button:has-text("New Key")`).Click())
+	newKeyBtn := page.Locator(`button:has-text("New Key")`)
+	waitVisible(t, newKeyBtn)
+	require.NoError(t, newKeyBtn.Click())
 	modal := page.Locator("#main-modal.active")
 	waitVisible(t, modal)
 
@@ -214,9 +217,7 @@ func createKeyWithFormat(t *testing.T, page playwright.Page, key, value, format 
 	waitVisible(t, submitBtn)
 	require.NoError(t, submitBtn.Click())
 
-	// wait for modal to close first (ensures HTMX request completed)
-	waitHidden(t, modal)
-	// then wait for table to show the new key (positive signal that HTMX swap completed)
+	// wait for table to show the new key (positive signal that HTMX swap completed)
 	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key)))
 }
 
