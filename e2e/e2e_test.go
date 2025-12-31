@@ -1,5 +1,17 @@
 //go:build e2e
 
+// Package e2e contains end-to-end tests for the Stash web UI.
+//
+// Test organization:
+//   - e2e_test.go: TestMain, shared helpers, constants
+//   - auth_test.go: authentication tests (login, logout, sessions)
+//   - kv_test.go: KV CRUD tests (create, view, edit, delete)
+//   - history_test.go: git history tests (commits, revisions, restore)
+//   - permissions_test.go: permission tests (admin, readonly, scoped)
+//   - search_test.go: search functionality tests
+//   - ui_test.go: UI mode tests (theme, view mode, sort, format)
+//   - zk_test.go: zero-knowledge encryption tests
+//   - secrets_test.go: server-side secrets tests (separate server)
 package e2e
 
 import (
@@ -135,19 +147,23 @@ func newPage(t *testing.T) playwright.Page {
 	return page
 }
 
-// waitVisible waits for locator to become visible
+// waitVisible waits for locator to become visible.
+// timeout is 8s to accommodate CI environments where git commits can be slow.
 func waitVisible(t *testing.T, loc playwright.Locator) {
 	t.Helper()
 	require.NoError(t, loc.WaitFor(playwright.LocatorWaitForOptions{
-		State: playwright.WaitForSelectorStateVisible,
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(8000),
 	}))
 }
 
-// waitHidden waits for locator to become hidden
+// waitHidden waits for locator to become hidden.
+// timeout is 8s to accommodate CI environments where git commits can be slow.
 func waitHidden(t *testing.T, loc playwright.Locator) {
 	t.Helper()
 	require.NoError(t, loc.WaitFor(playwright.LocatorWaitForOptions{
-		State: playwright.WaitForSelectorStateHidden,
+		State:   playwright.WaitForSelectorStateHidden,
+		Timeout: playwright.Float(8000),
 	}))
 }
 
@@ -250,6 +266,24 @@ func viewKey(t *testing.T, page playwright.Page, key string) playwright.Locator 
 	return modal
 }
 
+// viewKeyByText opens the view modal for a key using row text matching.
+// use this for keys with icons (ZK, secrets) where td.key-cell:has-text() may fail
+// due to trailing whitespace from icon SVG elements. tr:has-text() does partial matching
+// on the entire row, avoiding the whitespace issue.
+func viewKeyByText(t *testing.T, page playwright.Page, key string) playwright.Locator {
+	t.Helper()
+	// find row by text content (tr:has-text does partial match, works with icon whitespace)
+	row := page.Locator(fmt.Sprintf(`tr:has-text(%q)`, key))
+	waitVisible(t, row)
+	// click the key cell within the row - use First() to be explicit
+	keyCell := row.Locator("td.key-cell").First()
+	waitVisible(t, keyCell) // ensure cell is ready before click
+	require.NoError(t, keyCell.Click())
+	modal := page.Locator("#main-modal.active")
+	waitVisible(t, modal)
+	return modal
+}
+
 // cleanupKeys removes all keys with given prefix
 func cleanupKeys(t *testing.T, page playwright.Page, prefix string) {
 	t.Helper()
@@ -281,631 +315,4 @@ func cleanupKeys(t *testing.T, page playwright.Page, prefix string) {
 			return e == nil && newCnt < cnt
 		}, 5*time.Second, 100*time.Millisecond)
 	}
-}
-
-// ==================== Auth Tests ====================
-
-func TestAuth_LoginValid(t *testing.T) {
-	page := newPage(t)
-
-	_, err := page.Goto(baseURL + "/login")
-	require.NoError(t, err)
-
-	require.NoError(t, page.Locator("#username").Fill("admin"))
-	require.NoError(t, page.Locator("#password").Fill("testpass"))
-	require.NoError(t, page.Locator(`button[type="submit"]`).Click())
-	require.NoError(t, page.Locator(`button:has-text("New Key")`).WaitFor())
-
-	assert.Equal(t, baseURL+"/", page.URL())
-}
-
-func TestAuth_LoginInvalid(t *testing.T) {
-	page := newPage(t)
-
-	_, err := page.Goto(baseURL + "/login")
-	require.NoError(t, err)
-
-	require.NoError(t, page.Locator("#username").Fill("admin"))
-	require.NoError(t, page.Locator("#password").Fill("wrongpass"))
-	require.NoError(t, page.Locator(`button[type="submit"]`).Click())
-	// wait for error message to appear
-	waitVisible(t, page.Locator(".error-message"))
-
-	assert.Contains(t, page.URL(), "/login")
-}
-
-func TestAuth_Logout(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	require.NoError(t, page.Locator(`button[title="Logout"]`).Click())
-	require.NoError(t, page.Locator("#username").WaitFor())
-
-	assert.Contains(t, page.URL(), "/login")
-}
-
-func TestAuth_ProtectedRouteRedirect(t *testing.T) {
-	page := newPage(t)
-
-	// try to access main page without login
-	_, err := page.Goto(baseURL + "/")
-	require.NoError(t, err)
-
-	// should redirect to login
-	assert.Contains(t, page.URL(), "/login")
-}
-
-func TestAuth_SessionPersists(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// reload page
-	_, err := page.Reload()
-	require.NoError(t, err)
-	require.NoError(t, page.Locator(`h1:has-text("Stash")`).WaitFor())
-
-	// should still be logged in
-	assert.Equal(t, baseURL+"/", page.URL())
-}
-
-// ==================== KV CRUD Tests ====================
-
-func TestKV_CreateKey(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-crud/create-test"
-	createKey(t, page, keyName, "test value")
-
-	visible, err := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).IsVisible()
-	require.NoError(t, err)
-	assert.True(t, visible, "created key should be visible")
-
-	deleteKey(t, page, keyName)
-}
-
-func TestKV_ViewKey(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-crud/view-test"
-	keyValue := "value to view"
-	createKey(t, page, keyName, keyValue)
-
-	modal := viewKey(t, page, keyName)
-	valueContent := page.Locator(".value-content")
-	waitVisible(t, valueContent)
-
-	// verify value
-	text, err := valueContent.TextContent()
-	require.NoError(t, err)
-	assert.Contains(t, text, keyValue)
-
-	// close and cleanup
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-	deleteKey(t, page, keyName)
-}
-
-func TestKV_EditKey(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-crud/edit-test"
-	createKey(t, page, keyName, "original value")
-
-	// click edit
-	row := page.Locator(fmt.Sprintf(`tr:has-text(%q)`, keyName))
-	editBtn := row.Locator(".btn-edit")
-	waitVisible(t, editBtn) // ensure button is ready after HTMX swap
-	require.NoError(t, editBtn.Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
-
-	// update value
-	newValue := "updated value"
-	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill(newValue))
-	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
-	waitHidden(t, modal)
-
-	// verify by viewing
-	modal = viewKey(t, page, keyName)
-	valueContent := page.Locator(".value-content")
-	waitVisible(t, valueContent)
-
-	text, err := valueContent.TextContent()
-	require.NoError(t, err)
-	assert.Contains(t, text, newValue)
-
-	// cleanup
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-	deleteKey(t, page, keyName)
-}
-
-func TestKV_DeleteKey(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-crud/delete-test"
-	createKey(t, page, keyName, "to be deleted")
-
-	deleteKey(t, page, keyName)
-
-	visible, err := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).IsVisible()
-	require.NoError(t, err)
-	assert.False(t, visible, "deleted key should not be visible")
-}
-
-func TestKV_CreateKeyWithSlashes(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-crud/nested/deep/key"
-	createKey(t, page, keyName, "nested value")
-
-	visible, err := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).IsVisible()
-	require.NoError(t, err)
-	assert.True(t, visible, "nested key should be visible")
-
-	deleteKey(t, page, keyName)
-}
-
-// ==================== History Tests (Git Mode) ====================
-
-func TestHistory_ShowsCommits(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-history/commits-test"
-	createKey(t, page, keyName, "version 1")
-	updateKey(t, page, keyName, "version 2")
-	updateKey(t, page, keyName, "version 3")
-
-	modal := viewKey(t, page, keyName)
-
-	// click history button
-	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
-	historyTable := page.Locator(".history-table")
-	waitVisible(t, historyTable)
-
-	// should see history table
-	visible, err := historyTable.IsVisible()
-	require.NoError(t, err)
-	assert.True(t, visible, "history table should be visible")
-
-	// close and cleanup
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-	deleteKey(t, page, keyName)
-}
-
-func TestHistory_ViewSpecificRevision(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-history/revision-test"
-	initialValue := "initial value"
-	createKey(t, page, keyName, initialValue)
-	updateKey(t, page, keyName, "updated value")
-
-	modal := viewKey(t, page, keyName)
-
-	// click history
-	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
-	historyTable := page.Locator(".history-table")
-	waitVisible(t, historyTable)
-
-	// click on oldest revision (last row)
-	rows := page.Locator(".history-table tbody tr")
-	require.NoError(t, rows.Last().Locator("td").First().Click())
-	// wait for revision content to load
-	valueContent := page.Locator(".value-content")
-	waitVisible(t, valueContent)
-
-	// verify old value shown
-	text, err := valueContent.TextContent()
-	require.NoError(t, err)
-	assert.Contains(t, text, initialValue)
-
-	// cleanup
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-	deleteKey(t, page, keyName)
-}
-
-func TestHistory_RestoreRevision(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-history/restore-test"
-	originalValue := "original to restore"
-	createKey(t, page, keyName, originalValue)
-	updateKey(t, page, keyName, "new value")
-
-	modal := viewKey(t, page, keyName)
-
-	// click history
-	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
-	historyTable := page.Locator(".history-table")
-	waitVisible(t, historyTable)
-
-	// click restore on oldest revision
-	require.NoError(t, page.Locator(`button:has-text("Restore")`).Last().Click())
-	// wait for modal to close after restore
-	waitHidden(t, modal)
-
-	// reload and verify restored
-	_, err := page.Goto(baseURL + "/")
-	require.NoError(t, err)
-	keyCell := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName))
-	waitVisible(t, keyCell)
-
-	require.NoError(t, keyCell.Click())
-	waitVisible(t, modal)
-	valueContent := page.Locator(".value-content")
-	waitVisible(t, valueContent)
-
-	text, err := valueContent.TextContent()
-	require.NoError(t, err)
-	assert.Contains(t, text, originalValue)
-
-	// cleanup
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-	deleteKey(t, page, keyName)
-}
-
-// ==================== Permissions Tests ====================
-
-func TestPermissions_AdminFullAccess(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-perm/admin-test"
-
-	// create
-	createKey(t, page, keyName, "admin value")
-
-	// edit
-	updateKey(t, page, keyName, "updated by admin")
-
-	// delete
-	deleteKey(t, page, keyName)
-
-	visible, _ := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).IsVisible()
-	assert.False(t, visible)
-}
-
-func TestPermissions_ReadonlyCannotCreate(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "readonly", "testpass")
-
-	visible, err := page.Locator(`button:has-text("New Key")`).IsVisible()
-	require.NoError(t, err)
-	assert.False(t, visible, "readonly user should not see New Key button")
-}
-
-func TestPermissions_ReadonlyCannotEditDelete(t *testing.T) {
-	// create key as admin first
-	adminPage := newPage(t)
-	login(t, adminPage, "admin", "testpass")
-
-	keyName := "e2e-perm/readonly-check"
-	createKey(t, adminPage, keyName, "test")
-
-	// check as readonly
-	page := newPage(t)
-	login(t, page, "readonly", "testpass")
-	keyCell := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName))
-	waitVisible(t, keyCell)
-
-	// key should be visible
-	visible, _ := keyCell.IsVisible()
-	assert.True(t, visible, "readonly user should see the key")
-
-	// but no edit/delete buttons
-	editVisible, _ := page.Locator(".btn-edit").First().IsVisible()
-	deleteVisible, _ := page.Locator(".btn-danger").First().IsVisible()
-	assert.False(t, editVisible, "readonly user should not see edit buttons")
-	assert.False(t, deleteVisible, "readonly user should not see delete buttons")
-
-	// cleanup
-	deleteKey(t, adminPage, keyName)
-}
-
-func TestPermissions_ScopedUserPrefix(t *testing.T) {
-	// create keys as admin
-	adminPage := newPage(t)
-	login(t, adminPage, "admin", "testpass")
-
-	outsideKey := "e2e-perm/outside"
-	insideKey := "app/e2e-perm-test"
-
-	createKey(t, adminPage, outsideKey, "outside scope")
-	createKey(t, adminPage, insideKey, "inside scope")
-
-	// check as scoped user (only sees app/* prefix)
-	page := newPage(t)
-	login(t, page, "scoped", "testpass")
-	insideCell := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, insideKey))
-	waitVisible(t, insideCell)
-
-	// should see app/* key
-	insideVisible, _ := insideCell.IsVisible()
-	assert.True(t, insideVisible, "scoped user should see app/* key")
-
-	// should not see key outside prefix
-	outsideVisible, _ := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, outsideKey)).IsVisible()
-	assert.False(t, outsideVisible, "scoped user should not see key outside app/* prefix")
-
-	// cleanup
-	deleteKey(t, adminPage, outsideKey)
-	deleteKey(t, adminPage, insideKey)
-}
-
-// ==================== Search Tests ====================
-
-func TestSearch_FiltersKeyList(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// create test keys
-	createKey(t, page, "e2e-search/alpha", "alpha value")
-	createKey(t, page, "e2e-search/beta", "beta value")
-	createKey(t, page, "e2e-search/gamma", "gamma value")
-
-	// search for alpha - use Eventually for debounced search
-	require.NoError(t, page.Locator(`input[name="search"]`).Fill("e2e-search/alpha"))
-	assert.Eventually(t, func() bool {
-		vis, e := page.Locator(`td.key-cell:has-text("e2e-search/beta")`).IsVisible()
-		return e == nil && !vis // beta should be filtered out
-	}, 5*time.Second, 100*time.Millisecond, "beta should be filtered out")
-
-	// alpha should be visible
-	alphaVisible, _ := page.Locator(`td.key-cell:has-text("e2e-search/alpha")`).IsVisible()
-	assert.True(t, alphaVisible, "alpha should be visible")
-
-	// cleanup - clear search and wait for all keys to appear
-	require.NoError(t, page.Locator(`input[name="search"]`).Fill(""))
-	assert.Eventually(t, func() bool {
-		cnt, e := page.Locator(`td.key-cell:has-text("e2e-search")`).Count()
-		return e == nil && cnt >= 3
-	}, 5*time.Second, 100*time.Millisecond, "all keys should reappear")
-	cleanupKeys(t, page, "e2e-search")
-}
-
-func TestSearch_ClearShowsAll(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	createKey(t, page, "e2e-search2/one", "one")
-	createKey(t, page, "e2e-search2/two", "two")
-
-	// search then clear - use Eventually for debounced search
-	require.NoError(t, page.Locator(`input[name="search"]`).Fill("e2e-search2/one"))
-	assert.Eventually(t, func() bool {
-		vis, e := page.Locator(`td.key-cell:has-text("e2e-search2/two")`).IsVisible()
-		return e == nil && !vis // two should be filtered
-	}, 5*time.Second, 100*time.Millisecond)
-
-	require.NoError(t, page.Locator(`input[name="search"]`).Fill(""))
-	assert.Eventually(t, func() bool {
-		cnt, e := page.Locator(`td.key-cell:has-text("e2e-search2")`).Count()
-		return e == nil && cnt >= 2
-	}, 5*time.Second, 100*time.Millisecond)
-
-	// both should be visible
-	oneVisible, _ := page.Locator(`td.key-cell:has-text("e2e-search2/one")`).IsVisible()
-	twoVisible, _ := page.Locator(`td.key-cell:has-text("e2e-search2/two")`).IsVisible()
-	assert.True(t, oneVisible)
-	assert.True(t, twoVisible)
-
-	cleanupKeys(t, page, "e2e-search2")
-}
-
-func TestSearch_NoResultsShowsEmpty(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// search for nonexistent - use Eventually for debounced search
-	require.NoError(t, page.Locator(`input[name="search"]`).Fill("nonexistent-key-xyz"))
-	emptyState := page.Locator(".empty-state")
-	assert.Eventually(t, func() bool {
-		vis, e := emptyState.IsVisible()
-		return e == nil && vis
-	}, 5*time.Second, 100*time.Millisecond, "empty state should be shown")
-}
-
-// ==================== UI Mode Tests ====================
-
-func TestUI_ThemeToggle(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// get initial theme
-	initialTheme, err := page.Locator("html").GetAttribute("data-theme")
-	require.NoError(t, err)
-
-	require.NoError(t, page.Locator(`button[title="Toggle theme"]`).Click())
-	// wait for theme attribute to change
-	assert.Eventually(t, func() bool {
-		th, e := page.Locator("html").GetAttribute("data-theme")
-		return e == nil && th != initialTheme
-	}, 5*time.Second, 100*time.Millisecond, "theme should change")
-
-	theme, err := page.Locator("html").GetAttribute("data-theme")
-	require.NoError(t, err)
-	assert.NotEmpty(t, theme)
-}
-
-func TestUI_DarkThemeCRUD(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// ensure dark theme is active (toggle until we get dark)
-	for range 3 {
-		theme, err := page.Locator("html").GetAttribute("data-theme")
-		require.NoError(t, err)
-		if theme == "dark" {
-			break
-		}
-		require.NoError(t, page.Locator(`button[title="Toggle theme"]`).Click())
-		assert.Eventually(t, func() bool {
-			th, e := page.Locator("html").GetAttribute("data-theme")
-			return e == nil && th != theme
-		}, 5*time.Second, 100*time.Millisecond)
-	}
-
-	// verify dark theme is active
-	theme, err := page.Locator("html").GetAttribute("data-theme")
-	require.NoError(t, err)
-	assert.Equal(t, "dark", theme, "dark theme should be active")
-
-	// create key in dark mode
-	keyName := "e2e-ui/dark-theme-test"
-	keyValue := "dark mode value"
-	createKey(t, page, keyName, keyValue)
-
-	// view key in dark mode
-	modal := viewKey(t, page, keyName)
-	valueContent := page.Locator(".value-content")
-	waitVisible(t, valueContent)
-
-	text, err := valueContent.TextContent()
-	require.NoError(t, err)
-	assert.Contains(t, text, keyValue)
-
-	// close modal
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-
-	// edit key in dark mode
-	updatedValue := "updated in dark mode"
-	updateKey(t, page, keyName, updatedValue)
-
-	// verify edit worked
-	viewKey(t, page, keyName)
-	waitVisible(t, valueContent)
-
-	text, err = valueContent.TextContent()
-	require.NoError(t, err)
-	assert.Contains(t, text, updatedValue)
-
-	// close and delete
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-	deleteKey(t, page, keyName)
-
-	// verify deleted
-	visible, err := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName)).IsVisible()
-	require.NoError(t, err)
-	assert.False(t, visible, "key should be deleted")
-}
-
-func TestUI_ViewModeToggle(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-ui/viewmode"
-	createKey(t, page, keyName, "test")
-
-	// toggle to cards
-	require.NoError(t, page.Locator(`button[title="Toggle view mode"]`).Click())
-	cardsContainer := page.Locator(".cards-container")
-	waitVisible(t, cardsContainer)
-
-	visible, err := cardsContainer.IsVisible()
-	require.NoError(t, err)
-	assert.True(t, visible, "cards container should be visible")
-
-	// toggle back to table
-	require.NoError(t, page.Locator(`button[title="Toggle view mode"]`).Click())
-	waitVisible(t, page.Locator("table"))
-
-	deleteKey(t, page, keyName)
-}
-
-func TestUI_SortCycles(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// get initial sort label
-	sortBtn := page.Locator(".sort-button")
-	initialText, err := sortBtn.TextContent()
-	require.NoError(t, err)
-
-	// click sort button and wait for label to change
-	require.NoError(t, sortBtn.Click())
-	assert.Eventually(t, func() bool {
-		txt, e := sortBtn.TextContent()
-		return e == nil && txt != initialText
-	}, 5*time.Second, 100*time.Millisecond, "sort label should change")
-}
-
-func TestUI_FormatSelector(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// open new key form
-	require.NoError(t, page.Locator(`button:has-text("New Key")`).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
-
-	// check format options exist
-	options, err := page.Locator(`select[name="format"] option`).All()
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(options), 5, "should have at least 5 format options")
-
-	// close
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-}
-
-func TestUI_SyntaxHighlighting(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	keyName := "e2e-ui/highlight"
-	jsonValue := `{"key": "value"}`
-	createKeyWithFormat(t, page, keyName, jsonValue, "json")
-
-	modal := viewKey(t, page, keyName)
-	highlightedCode := page.Locator(".highlighted-code")
-	waitVisible(t, highlightedCode)
-
-	// should have highlighted code
-	highlighted, _ := highlightedCode.IsVisible()
-	assert.True(t, highlighted, "should have syntax highlighting for JSON")
-
-	// cleanup
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
-	deleteKey(t, page, keyName)
-}
-
-func TestUI_SecretsNotConfiguredError(t *testing.T) {
-	page := newPage(t)
-	login(t, page, "admin", "testpass")
-
-	// try to create a key with "secrets" in path when --secrets.key is not configured
-	require.NoError(t, page.Locator(`button:has-text("New Key")`).Click())
-	modal := page.Locator("#main-modal.active")
-	waitVisible(t, modal)
-
-	require.NoError(t, page.Locator(`input[name="key"]`).Fill("secrets/test-key"))
-	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill("test value"))
-	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
-
-	// should show error message in form
-	errorMsg := page.Locator("#form-error")
-	waitVisible(t, errorMsg)
-
-	errorText, err := errorMsg.TextContent()
-	require.NoError(t, err)
-	assert.Contains(t, errorText, "Secrets not configured", "should show secrets not configured error")
-
-	// close modal
-	require.NoError(t, page.Locator("#main-modal .modal-close").Click())
-	waitHidden(t, modal)
 }
