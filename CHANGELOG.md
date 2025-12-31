@@ -4,10 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.17.0] - 2025-12-31
+
 ### Added
-- Java SDK client library
+- Python SDK client library (#48)
+  - Published to PyPI (`pip install stash-client`)
+  - Same API as Go SDK with Pythonic patterns
+  - Context manager support for automatic cleanup
+  - Dict-like access (`client["key"] = value`)
+  - Cross-compatible ZK encryption with Go client
+- TypeScript/JavaScript SDK client library (#49)
+  - Published to npm (`npm install @umputun/stash-client`)
+  - Node.js 18+ and browser support
+  - Modern TypeScript with strict mode
+  - ESM and CJS dual output
+  - Cross-compatible ZK encryption with Go and Python clients
+- Java SDK client library (#50)
+  - Published to Maven Central (`io.github.umputun:stash-client`)
   - Java 11+ support with modern builder pattern API
-  - Published to GitHub Packages
   - Cross-compatible ZK encryption with Go, Python, and TypeScript clients
 
 ## [0.16.0] - 2025-12-30
@@ -19,16 +33,6 @@ All notable changes to this project are documented in this file.
   - AES-256-GCM encryption with Argon2id key derivation
   - Green shield icon and "Zero-Knowledge Encrypted" badge in web UI
   - Edit disabled for ZK-encrypted keys (server cannot decrypt)
-- Python SDK client library (#48)
-  - Same API as Go SDK with Pythonic patterns
-  - Context manager support for automatic cleanup
-  - Dict-like access (`client["key"] = value`)
-  - Cross-compatible ZK encryption with Go client
-- TypeScript/JavaScript SDK client library (#49)
-  - Node.js 18+ and browser support
-  - Modern TypeScript with strict mode
-  - ESM and CJS dual output
-  - Cross-compatible ZK encryption with Go and Python clients
 
 ### Changed
 - Dependencies: bump go-modules group with 3 updates (#46)
