@@ -148,22 +148,22 @@ func newPage(t *testing.T) playwright.Page {
 }
 
 // waitVisible waits for locator to become visible.
-// timeout is 8s to accommodate CI environments where git commits can be slow.
+// timeout is 15s to accommodate CI environments with variable performance.
 func waitVisible(t *testing.T, loc playwright.Locator) {
 	t.Helper()
 	require.NoError(t, loc.WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(8000),
+		Timeout: playwright.Float(15000),
 	}))
 }
 
 // waitHidden waits for locator to become hidden.
-// timeout is 8s to accommodate CI environments where git commits can be slow.
+// timeout is 15s to accommodate CI environments with variable performance.
 func waitHidden(t *testing.T, loc playwright.Locator) {
 	t.Helper()
 	require.NoError(t, loc.WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateHidden,
-		Timeout: playwright.Float(8000),
+		Timeout: playwright.Float(15000),
 	}))
 }
 

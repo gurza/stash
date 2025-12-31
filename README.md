@@ -38,10 +38,10 @@ Web UI available at http://localhost:8080
 
 ## Security Note
 
-Regular keys are stored in plaintext. For sensitive credentials, use the [Secrets Vault](#secrets-vault) feature, or consider:
+Regular keys are stored in plaintext. For sensitive credentials:
 
-- [HashiCorp Vault](https://www.vaultproject.io/) for enterprise secrets management
-- Client-side encryption before storing values
+- **[Zero-Knowledge Encryption](#zero-knowledge-encryption)** - client-side encryption, server never sees plaintext
+- **[Secrets Vault](#secrets-vault)** - server-side encryption with path-based access control
 - Filesystem-level encryption (LUKS, FileVault) for the database file
 
 ## Installation
