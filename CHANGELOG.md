@@ -4,13 +4,23 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-01-01
+
 ### Added
+- Audit trail web UI for viewing and filtering audit logs
 - Audit trail for KV operations
-  - Tracks read, update, delete actions on /kv/* routes
+  - Tracks read, create, update, delete actions on /kv/* routes
   - Configurable via `--audit.enabled`, `--audit.retention`, `--audit.query-limit`
   - POST /audit/query endpoint for admin users
   - Query by key prefix, actor, actor_type, action, result, time range
   - Automatic cleanup of entries older than retention period (default 90 days)
+
+### Changed
+- Refactored auth and audit packages for better separation of concerns
+- Audit date/time filter inputs now use plain text with format validation
+
+### Removed
+- E2E tests from CI (run locally with `make e2e`)
 
 ## [0.17.0] - 2025-12-31
 
