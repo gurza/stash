@@ -280,7 +280,13 @@ func deleteKey(t *testing.T, page playwright.Page, key string) {
 	require.NoError(t, row.Locator(".btn-danger").Click())
 	confirmModal := page.Locator("#confirm-modal")
 	waitVisible(t, confirmModal)
-	require.NoError(t, page.Locator("#confirm-delete-btn").Click())
+
+	// click confirm and wait for HTMX response to complete
+	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys/`), func() error {
+		return page.Locator("#confirm-delete-btn").Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
+
 	waitHidden(t, confirmModal)
 	// wait for row to disappear from table
 	waitHidden(t, row)
@@ -349,7 +355,12 @@ func cleanupKeys(t *testing.T, page playwright.Page, prefix string) {
 		require.NoError(t, deleteBtn.Click())
 		confirmModal := page.Locator("#confirm-modal")
 		waitVisible(t, confirmModal)
-		require.NoError(t, page.Locator("#confirm-delete-btn").Click())
+
+		// click confirm and wait for HTMX response to complete
+		_, err = page.ExpectResponse(regexp.MustCompile(`/web/keys/`), func() error {
+			return page.Locator("#confirm-delete-btn").Click()
+		}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+		require.NoError(t, err)
 		waitHidden(t, confirmModal)
 
 		// wait for row count to decrease

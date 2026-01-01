@@ -5,6 +5,7 @@ package e2e
 import (
 	"testing"
 
+	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,9 +18,14 @@ func TestAuth_LoginValid(t *testing.T) {
 
 	require.NoError(t, page.Locator("#username").Fill("admin"))
 	require.NoError(t, page.Locator("#password").Fill("testpass"))
-	require.NoError(t, page.Locator(`button[type="submit"]`).Click())
-	require.NoError(t, page.Locator(`button:has-text("New Key")`).WaitFor())
 
+	// click submit and wait for login response
+	_, err = page.ExpectResponse(baseURL+"/login", func() error {
+		return page.Locator(`button[type="submit"]`).Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
+
+	require.NoError(t, page.Locator(`button:has-text("New Key")`).WaitFor())
 	assert.Equal(t, baseURL+"/", page.URL())
 }
 
@@ -31,10 +37,15 @@ func TestAuth_LoginInvalid(t *testing.T) {
 
 	require.NoError(t, page.Locator("#username").Fill("admin"))
 	require.NoError(t, page.Locator("#password").Fill("wrongpass"))
-	require.NoError(t, page.Locator(`button[type="submit"]`).Click())
-	// wait for error message to appear
-	waitVisible(t, page.Locator(".error-message"))
 
+	// click submit and wait for login response
+	_, err = page.ExpectResponse(baseURL+"/login", func() error {
+		return page.Locator(`button[type="submit"]`).Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
+
+	// now safe to check DOM - response completed
+	waitVisible(t, page.Locator(".error-message"))
 	assert.Contains(t, page.URL(), "/login")
 }
 
@@ -42,9 +53,13 @@ func TestAuth_Logout(t *testing.T) {
 	page := newPage(t)
 	login(t, page, "admin", "testpass")
 
-	require.NoError(t, page.Locator(`button[title="Logout"]`).Click())
-	require.NoError(t, page.Locator("#username").WaitFor())
+	// click logout and wait for response
+	_, err := page.ExpectResponse(baseURL+"/logout", func() error {
+		return page.Locator(`button[title="Logout"]`).Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
 
+	require.NoError(t, page.Locator("#username").WaitFor())
 	assert.Contains(t, page.URL(), "/login")
 }
 
