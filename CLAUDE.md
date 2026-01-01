@@ -212,7 +212,7 @@ POST   /logout                   # clear session, redirect to login
 - ZK detection: `IsZKEncrypted()` in zkcrypto.go, `ZKEncrypted` field in KeyInfo (db.go uses SUBSTR)
 - ZK web UI: green shield icon, "Zero-Knowledge Encrypted" badge, edit disabled (server can't decrypt)
 - ZK client library: `lib/stash/zk.go` with `WithZKKey(passphrase)` option, auto encrypt/decrypt
-- Changelog: CHANGELOG.md (uppercase) in project root, uses Keep a Changelog format
+- Changelog: CHANGELOG.md (uppercase) in project root, update only on releases (no [Unreleased] placeholder)
 - Keep it simple - no over-engineering
 
 ## E2E Testing
