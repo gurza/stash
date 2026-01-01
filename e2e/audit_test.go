@@ -3,8 +3,13 @@
 package e2e
 
 import (
+	"fmt"
+	"net/http"
+	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,4 +188,67 @@ func TestAudit_BackToMain(t *testing.T) {
 	// should be back on main page
 	require.NoError(t, page.WaitForURL(baseURL+"/"))
 	waitVisible(t, page.Locator(`h1:has-text("Stash")`))
+}
+
+func TestAudit_Pagination(t *testing.T) {
+	const apiToken = "e2e-admin-token-12345"
+
+	page := newPage(t)
+	login(t, page, "admin", "testpass")
+
+	// create 105 keys via API to generate audit entries (page size is 100)
+	for i := 0; i < 105; i++ {
+		key := fmt.Sprintf("pagination-test/key%03d", i)
+		req, err := http.NewRequest(http.MethodPut, baseURL+"/kv/"+key, strings.NewReader("value"))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		resp.Body.Close()
+	}
+
+	// navigate to audit page
+	_, err := page.Goto(baseURL + "/audit")
+	require.NoError(t, err)
+	waitVisible(t, page.Locator(`.audit-header h1:has-text("Audit Log")`))
+
+	// wait for table to load
+	auditTable := page.Locator(".audit-table")
+	waitVisible(t, auditTable)
+
+	// verify pagination shows page 1 (use .stats to target visible pagination, not hidden OOB)
+	pageInfo := page.Locator(".stats #pagination .page-info")
+	waitVisible(t, pageInfo)
+	pageText, err := pageInfo.TextContent()
+	require.NoError(t, err)
+	assert.Contains(t, pageText, "1 /")
+
+	// click next page button and wait for HTMX response
+	nextBtn := page.Locator(".stats #pagination .btn-page:not(.disabled)").Last()
+	waitVisible(t, nextBtn)
+	htmxResp, err := page.ExpectResponse(regexp.MustCompile(`/web/audit`), func() error {
+		return nextBtn.Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
+	require.Equal(t, 200, htmxResp.Status())
+
+	// verify we're on page 2
+	waitVisible(t, auditTable)
+	pageText, err = pageInfo.TextContent()
+	require.NoError(t, err)
+	assert.Contains(t, pageText, "2 /")
+
+	// click previous page button and wait for HTMX response
+	prevBtn := page.Locator(".stats #pagination .btn-page:not(.disabled)").First()
+	htmxResp, err = page.ExpectResponse(regexp.MustCompile(`/web/audit`), func() error {
+		return prevBtn.Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
+	require.Equal(t, 200, htmxResp.Status())
+
+	// verify we're back on page 1
+	waitVisible(t, auditTable)
+	pageText, err = pageInfo.TextContent()
+	require.NoError(t, err)
+	assert.Contains(t, pageText, "1 /")
 }

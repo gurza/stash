@@ -1,12 +1,20 @@
 {{define "audit-table"}}
 {{if .Error}}
 <div class="error-message">{{.Error}}</div>
+<div style="display:none">
+<span id="entry-count" hx-swap-oob="innerHTML">error</span>
+<span id="pagination" hx-swap-oob="outerHTML" class="pagination"></span>
+</div>
 {{else if eq (len .Entries) 0}}
 <div class="empty-state">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
         <path d="M12 1C8.14 1 5 4.14 5 8c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h1v1a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1h1a1 1 0 0 0 1-1v-3.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/>
     </svg>
     <p>No audit entries found</p>
+</div>
+<div style="display:none">
+<span id="entry-count" hx-swap-oob="innerHTML">no entries</span>
+<span id="pagination" hx-swap-oob="outerHTML" class="pagination"></span>
 </div>
 {{else}}
 <table class="audit-table">
@@ -35,5 +43,21 @@
         {{end}}
     </tbody>
 </table>
+<div style="display:none">
+<span id="entry-count" hx-swap-oob="innerHTML">{{.Total}} {{if eq .Total 1}}entry{{else}}entries{{end}}</span>
+<span id="pagination" hx-swap-oob="outerHTML" class="pagination">
+    {{if gt .TotalPages 1}}
+    <button class="btn-page{{if not .HasPrev}} disabled{{end}}"
+            {{if .HasPrev}}hx-get="{{.BaseURL}}/web/audit?page={{sub .Page 1}}&key={{.Key}}&actor={{.Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
+            hx-target="#audit-table"
+            hx-swap="innerHTML"{{end}}>&#8249;</button>
+    <span class="page-info">{{.Page}} / {{.TotalPages}}</span>
+    <button class="btn-page{{if not .HasNext}} disabled{{end}}"
+            {{if .HasNext}}hx-get="{{.BaseURL}}/web/audit?page={{add .Page 1}}&key={{.Key}}&actor={{.Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
+            hx-target="#audit-table"
+            hx-swap="innerHTML"{{end}}>&#8250;</button>
+    {{end}}
+</span>
+</div>
 {{end}}
 {{end}}
