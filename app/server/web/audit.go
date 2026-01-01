@@ -182,17 +182,29 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		}
 	}
 
-	if entries == nil {
-		entries = []store.AuditEntry{}
-	}
-
-	// pagination
+	// pagination - calculate total pages
 	totalPages := (total + h.pageSize - 1) / h.pageSize
 	if totalPages == 0 {
 		totalPages = 1
 	}
+
+	// if page exceeds total pages, clamp and re-query
 	if page > totalPages {
 		page = totalPages
+		query.Offset = (page - 1) * h.pageSize
+		entries, _, err = h.store.QueryAudit(r.Context(), query)
+		if err != nil {
+			return auditTemplateData{
+				Error:       "Failed to query audit log",
+				Theme:       h.getTheme(r),
+				AuthEnabled: h.auth.Enabled(),
+				BaseURL:     h.baseURL,
+			}
+		}
+	}
+
+	if entries == nil {
+		entries = []store.AuditEntry{}
 	}
 
 	return auditTemplateData{
