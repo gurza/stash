@@ -16,6 +16,7 @@
             <th class="col-action">Action</th>
             <th class="col-key">Key</th>
             <th class="col-actor">Actor</th>
+            <th class="col-ip">IP</th>
             <th class="col-result">Result</th>
             <th class="col-size">Size</th>
         </tr>
@@ -23,10 +24,11 @@
     <tbody>
         {{range .Entries}}
         <tr class="{{if eq .Result.String "denied"}}row-denied{{else if eq .Result.String "not_found"}}row-notfound{{end}}">
-            <td class="col-time" title="{{formatTime .Timestamp}}">{{relativeTime .Timestamp}}</td>
+            <td class="col-time">{{formatTime .Timestamp}}</td>
             <td class="col-action"><span class="badge {{actionClass .Action}}">{{upper .Action.String}}</span></td>
             <td class="col-key" title="{{.Key}}">{{.Key}}</td>
             <td class="col-actor" title="{{.Actor}}">{{.Actor}}</td>
+            <td class="col-ip">{{if .IP}}{{.IP}}{{else}}-{{end}}</td>
             <td class="col-result"><span class="badge {{resultClass .Result}}">{{.Result.String}}</span></td>
             <td class="col-size">{{if .ValueSize}}{{formatSize .ValueSize}}{{else}}-{{end}}</td>
         </tr>
