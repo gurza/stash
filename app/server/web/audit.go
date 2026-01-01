@@ -94,7 +94,11 @@ func (h *AuditHandler) HandleAuditPage(w http.ResponseWriter, r *http.Request) {
 // HandleAuditTable handles GET /web/audit - returns audit table partial for HTMX.
 func (h *AuditHandler) HandleAuditTable(w http.ResponseWriter, r *http.Request) {
 	username := h.parent.getCurrentUser(r)
-	if username == "" || !h.auth.IsAdmin(username) {
+	if username == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if !h.auth.IsAdmin(username) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}

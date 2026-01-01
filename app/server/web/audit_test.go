@@ -69,7 +69,7 @@ func TestAuditHandler_HandleAuditPage(t *testing.T) {
 }
 
 func TestAuditHandler_HandleAuditTable(t *testing.T) {
-	t.Run("returns 403 for unauthenticated request", func(t *testing.T) {
+	t.Run("returns 401 for unauthenticated request", func(t *testing.T) {
 		auth := &mocks.AuthProviderMock{
 			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
 		}
@@ -80,7 +80,7 @@ func TestAuditHandler_HandleAuditTable(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.HandleAuditTable(rec, req)
 
-		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	})
 
 	t.Run("returns 403 for non-admin", func(t *testing.T) {
@@ -207,6 +207,43 @@ func TestAuditHandler_BuildAuditData(t *testing.T) {
 
 		assert.Equal(t, 2, callCount, "should re-query after clamping")
 		assert.Contains(t, rec.Body.String(), "clamped")
+	})
+
+	t.Run("invalid page values default to 1", func(t *testing.T) {
+		var capturedQuery store.AuditQuery
+		auditStore := &mocks.AuditStoreMock{
+			QueryAuditFunc: func(_ context.Context, q store.AuditQuery) ([]store.AuditEntry, int, error) {
+				capturedQuery = q
+				return []store.AuditEntry{}, 0, nil
+			},
+		}
+		auth := &mocks.AuthProviderMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "admin", true },
+			IsAdminFunc:        func(username string) bool { return true },
+			EnabledFunc:        func() bool { return true },
+		}
+		h := newTestAuditHandler(t, auditStore, auth)
+
+		testCases := []struct{ page string }{
+			{"0"},   // zero defaults to 1
+			{"-5"},  // negative defaults to 1
+			{"abc"}, // non-numeric defaults to 1
+			{""},    // empty defaults to 1
+		}
+
+		for _, tc := range testCases {
+			url := "/web/audit"
+			if tc.page != "" {
+				url += "?page=" + tc.page
+			}
+			req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
+			req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "token"})
+			rec := httptest.NewRecorder()
+			h.HandleAuditTable(rec, req)
+
+			assert.Equal(t, http.StatusOK, rec.Code, "page=%q should succeed", tc.page)
+			assert.Equal(t, 0, capturedQuery.Offset, "page=%q should have offset 0 (page 1)", tc.page)
+		}
 	})
 
 	t.Run("handles query error", func(t *testing.T) {

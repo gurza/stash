@@ -1852,3 +1852,77 @@ users:
 		require.Nil(t, auth)
 	})
 }
+
+func TestAuth_IsTokenAdmin(t *testing.T) {
+	t.Run("admin token", func(t *testing.T) {
+		content := `
+tokens:
+  - token: "admin-token"
+    admin: true
+    permissions:
+      - prefix: "*"
+        access: rw
+  - token: "regular-token"
+    permissions:
+      - prefix: "*"
+        access: r
+`
+		f := createTempFile(t, content)
+		ss := testSessionStore(t)
+		auth, err := NewAuth(f, time.Hour, ss)
+		require.NoError(t, err)
+
+		assert.True(t, auth.IsTokenAdmin("admin-token"), "admin token should return true")
+		assert.False(t, auth.IsTokenAdmin("regular-token"), "non-admin token should return false")
+		assert.False(t, auth.IsTokenAdmin("unknown-token"), "unknown token should return false")
+	})
+
+	t.Run("nil auth", func(t *testing.T) {
+		var auth *Auth
+		assert.False(t, auth.IsTokenAdmin("any-token"), "nil auth should return false")
+	})
+
+	t.Run("auth disabled", func(t *testing.T) {
+		auth, err := NewAuth("", time.Hour, nil)
+		require.NoError(t, err)
+		require.Nil(t, auth)
+	})
+}
+
+func TestExtractToken(t *testing.T) {
+	t.Run("empty request", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		assert.Empty(t, ExtractToken(req))
+	})
+
+	t.Run("only X-Auth-Token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set("X-Auth-Token", "xauth-value")
+		assert.Equal(t, "xauth-value", ExtractToken(req))
+	})
+
+	t.Run("only Bearer token", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set("Authorization", "Bearer bearer-value")
+		assert.Equal(t, "bearer-value", ExtractToken(req))
+	})
+
+	t.Run("both headers present", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set("X-Auth-Token", "xauth-wins")
+		req.Header.Set("Authorization", "Bearer bearer-loses")
+		assert.Equal(t, "xauth-wins", ExtractToken(req), "X-Auth-Token should take precedence")
+	})
+
+	t.Run("malformed Authorization header", func(t *testing.T) {
+		// no space after Bearer
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set("Authorization", "Bearertoken")
+		assert.Empty(t, ExtractToken(req))
+
+		// wrong prefix
+		req = httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+		req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+		assert.Empty(t, ExtractToken(req))
+	})
+}

@@ -35,6 +35,7 @@ Web UI available at http://localhost:8080
 - Optional client-side zero-knowledge encryption (server never sees plaintext)
 - Optional git versioning with full audit trail and point-in-time recovery
 - Optional in-memory cache for read operations
+- Optional audit logging with retention and admin-only web UI
 - Go, Python, TypeScript/JavaScript, and Java client libraries with full API support and client-side, zero-knowledge encryption
 
 ## Security Note

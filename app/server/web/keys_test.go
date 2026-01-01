@@ -1148,6 +1148,24 @@ func TestHandler_AuditLogging(t *testing.T) {
 		assert.Nil(t, capturedEntries[0].ValueSize, "delete should not have value size")
 	})
 
+	t.Run("view logs audit entry", func(t *testing.T) {
+		capturedEntries = nil
+		req := httptest.NewRequest(http.MethodGet, "/web/keys/view/existing", http.NoBody)
+		req.SetPathValue("key", "existing")
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "testtoken"})
+		rec := httptest.NewRecorder()
+		h.handleKeyView(rec, req)
+
+		require.Len(t, capturedEntries, 1)
+		assert.Equal(t, enum.AuditActionRead, capturedEntries[0].Action)
+		assert.Equal(t, "existing", capturedEntries[0].Key)
+		assert.Equal(t, "testuser", capturedEntries[0].Actor)
+		assert.Equal(t, enum.ActorTypeUser, capturedEntries[0].ActorType)
+		assert.Equal(t, enum.AuditResultSuccess, capturedEntries[0].Result)
+		require.NotNil(t, capturedEntries[0].ValueSize)
+		assert.Equal(t, len("value"), *capturedEntries[0].ValueSize) // "value" from GetWithFormatFunc
+	})
+
 	t.Run("no audit when audit logger is nil", func(t *testing.T) {
 		// create handler without audit logger
 		hNoAudit, err := New(st, auth, defaultValidatorMock(), nil, nil, Config{})
