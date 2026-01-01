@@ -1,0 +1,72 @@
+[
+  {
+    "label": "Run Server (default)",
+    "command": "./stash server --dbg",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true
+  },
+  {
+    "label": "Run Server (with auth)",
+    "command": "./stash server --dbg --auth.file=auth-private.yml --auth.hot-reload",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true
+  },
+  {
+    "label": "Run Server (with git)",
+    "command": "./stash server --dbg --git.enabled --git.path=/tmp/stash-git",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true
+  },
+  {
+    "label": "Run Server (with audit)",
+    "command": "./stash server --dbg --audit.enabled --auth.file=auth-private.yml",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true
+  },
+  {
+    "label": "Run Server (full)",
+    "command": "./stash server --dbg --auth.file=auth-private.yml --git.enabled --git.path=/tmp/stash-git --audit.enabled --secrets.key=test-secret-key-min-16-chars",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true
+  },
+  {
+    "label": "Build",
+    "command": "make build",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Test All",
+    "command": "go test ./...",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Test Current Package",
+    "command": "go test -v ./$(dirname $ZED_FILE | sed 's|.*/stash/||')/...",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Lint",
+    "command": "golangci-lint run",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "E2E Tests",
+    "command": "make e2e",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "E2E Tests (visible browser)",
+    "command": "make e2e-ui",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "HTTP Requests (local)",
+    "command": "docker run --rm --network host -v $(pwd):/workdir jetbrains/intellij-http-client -D -e local -v http-client.env.json requests.http",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Coverage Report (HTML)",
+    "command": "go test -coverprofile=coverage.out $(go list ./... | grep -v '/mocks' | grep -v '/vendor' | grep -v '/enum') && go tool cover -html=coverage.out -o coverage.html && echo '' && echo 'Coverage report: file://'$(pwd)'/coverage.html' && open coverage.html",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  }
+]
