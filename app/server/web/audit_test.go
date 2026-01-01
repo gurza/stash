@@ -69,6 +69,20 @@ func TestAuditHandler_HandleAuditPage(t *testing.T) {
 }
 
 func TestAuditHandler_HandleAuditTable(t *testing.T) {
+	t.Run("returns 403 for unauthenticated request", func(t *testing.T) {
+		auth := &mocks.AuthProviderMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
+		}
+		h := newTestAuditHandler(t, nil, auth)
+
+		req := httptest.NewRequest(http.MethodGet, "/web/audit", http.NoBody)
+		// no session cookie
+		rec := httptest.NewRecorder()
+		h.HandleAuditTable(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
 	t.Run("returns 403 for non-admin", func(t *testing.T) {
 		auth := &mocks.AuthProviderMock{
 			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "user", true },

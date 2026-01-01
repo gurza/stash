@@ -24,8 +24,7 @@ type AuditHandler struct {
 	store    AuditStore
 	auth     AuthProvider
 	parent   *Handler
-	baseURL  string
-	pageSize int
+	pageSize int // audit-specific: defaults to 100 even if parent.pageSize is 0
 }
 
 // NewAuditHandler creates a new audit handler.
@@ -38,7 +37,6 @@ func NewAuditHandler(auditStore AuditStore, auth AuthProvider, h *Handler) *Audi
 		store:    auditStore,
 		auth:     auth,
 		parent:   h,
-		baseURL:  h.baseURL,
 		pageSize: pageSize,
 	}
 }
@@ -74,7 +72,7 @@ type auditTemplateData struct {
 func (h *AuditHandler) HandleAuditPage(w http.ResponseWriter, r *http.Request) {
 	username := h.parent.getCurrentUser(r)
 	if username == "" {
-		http.Redirect(w, r, h.baseURL+"/login?return="+url.QueryEscape(h.baseURL+"/audit"), http.StatusFound)
+		http.Redirect(w, r, h.parent.baseURL+"/login?return="+url.QueryEscape(h.parent.baseURL+"/audit"), http.StatusFound)
 		return
 	}
 
@@ -82,7 +80,7 @@ func (h *AuditHandler) HandleAuditPage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_ = h.parent.tmpl.ExecuteTemplate(w, "error", map[string]any{
 			"Error":   "Admin access required",
-			"BaseURL": h.baseURL,
+			"BaseURL": h.parent.baseURL,
 		})
 		return
 	}
@@ -168,7 +166,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 			Error:       "Failed to query audit log",
 			Theme:       h.parent.getTheme(r),
 			AuthEnabled: h.auth.Enabled(),
-			BaseURL:     h.baseURL,
+			BaseURL:     h.parent.baseURL,
 		}
 	}
 
@@ -188,7 +186,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 				Error:       "Failed to query audit log",
 				Theme:       h.parent.getTheme(r),
 				AuthEnabled: h.auth.Enabled(),
-				BaseURL:     h.baseURL,
+				BaseURL:     h.parent.baseURL,
 			}
 		}
 	}
@@ -213,7 +211,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		HasNext:     page < totalPages,
 		Theme:       h.parent.getTheme(r),
 		AuthEnabled: h.auth.Enabled(),
-		BaseURL:     h.baseURL,
+		BaseURL:     h.parent.baseURL,
 	}
 }
 

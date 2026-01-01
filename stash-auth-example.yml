@@ -43,8 +43,9 @@ users:
 # Generate secure tokens with: uuidgen or openssl rand -hex 16
 # WARNING: Do not use simple names as tokens - they are easy to guess
 tokens:
-  # Full access token for CI/CD pipelines
+  # Full access token for CI/CD pipelines with admin privileges
   - token: "a4f8d9e2-7c3b-4a1f-9e2d-8c7b6a5f4e3d"  # replace with secure random token
+    admin: true  # grants admin privileges (audit log access)
     permissions:
       - prefix: "*"
         access: rw
@@ -84,6 +85,10 @@ tokens:
 #
 # Special tokens:
 #   token: "*"    - public access, no authentication required
+#
+# Admin privileges:
+#   admin: true   - grants access to admin endpoints (e.g., audit log query)
+#                   applies to users and tokens
 #
 # When multiple prefixes match, the longest (most specific) wins.
 #

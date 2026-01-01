@@ -750,6 +750,134 @@ func TestAuditHandler_HandleQuery(t *testing.T) {
 		assert.NotNil(t, resp.Entries)
 		assert.Empty(t, resp.Entries)
 	})
+
+	t.Run("queries audit log with admin Bearer token", func(t *testing.T) {
+		auditStore := &mocks.AuditStoreMock{
+			QueryAuditFunc: func(_ context.Context, _ store.AuditQuery) ([]store.AuditEntry, int, error) {
+				return []store.AuditEntry{}, 0, nil
+			},
+		}
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
+			HasTokenACLFunc:    func(token string) bool { return token == "admintoken123" },
+			IsAdminFunc:        func(_ string) bool { return false },
+			IsTokenAdminFunc:   func(token string) bool { return token == "admintoken123" },
+		}
+		handler := NewAuditHandler(auditStore, auth, 100)
+
+		req := httptest.NewRequest(http.MethodPost, "/audit/query", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer admintoken123")
+		rec := httptest.NewRecorder()
+
+		handler.HandleQuery(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, auditStore.QueryAuditCalls(), 1)
+	})
+
+	t.Run("queries audit log with admin X-Auth-Token", func(t *testing.T) {
+		auditStore := &mocks.AuditStoreMock{
+			QueryAuditFunc: func(_ context.Context, _ store.AuditQuery) ([]store.AuditEntry, int, error) {
+				return []store.AuditEntry{}, 0, nil
+			},
+		}
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
+			HasTokenACLFunc:    func(token string) bool { return token == "xauthadmin456" },
+			IsAdminFunc:        func(_ string) bool { return false },
+			IsTokenAdminFunc:   func(token string) bool { return token == "xauthadmin456" },
+		}
+		handler := NewAuditHandler(auditStore, auth, 100)
+
+		req := httptest.NewRequest(http.MethodPost, "/audit/query", strings.NewReader(`{}`))
+		req.Header.Set("X-Auth-Token", "xauthadmin456")
+		rec := httptest.NewRecorder()
+
+		handler.HandleQuery(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		require.Len(t, auditStore.QueryAuditCalls(), 1)
+	})
+
+	t.Run("returns forbidden for non-admin Bearer token", func(t *testing.T) {
+		auditStore := &mocks.AuditStoreMock{}
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
+			HasTokenACLFunc:    func(token string) bool { return token == "regulartoken" },
+			IsAdminFunc:        func(_ string) bool { return false },
+			IsTokenAdminFunc:   func(_ string) bool { return false },
+		}
+		handler := NewAuditHandler(auditStore, auth, 100)
+
+		req := httptest.NewRequest(http.MethodPost, "/audit/query", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer regulartoken")
+		rec := httptest.NewRecorder()
+
+		handler.HandleQuery(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
+	t.Run("returns unauthorized for unknown token", func(t *testing.T) {
+		auditStore := &mocks.AuditStoreMock{}
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
+			HasTokenACLFunc:    func(_ string) bool { return false },
+			IsAdminFunc:        func(_ string) bool { return false },
+			IsTokenAdminFunc:   func(_ string) bool { return false },
+		}
+		handler := NewAuditHandler(auditStore, auth, 100)
+
+		req := httptest.NewRequest(http.MethodPost, "/audit/query", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer unknowntoken")
+		rec := httptest.NewRecorder()
+
+		handler.HandleQuery(rec, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+
+	t.Run("returns error for malformed JSON body", func(t *testing.T) {
+		auditStore := &mocks.AuditStoreMock{}
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "admin", true },
+			HasTokenACLFunc:    func(_ string) bool { return false },
+			IsAdminFunc:        func(username string) bool { return username == "admin" },
+		}
+		handler := NewAuditHandler(auditStore, auth, 100)
+
+		req := httptest.NewRequest(http.MethodPost, "/audit/query", strings.NewReader(`{invalid json`))
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "admin-session"})
+		rec := httptest.NewRecorder()
+
+		handler.HandleQuery(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid request body")
+	})
+
+	t.Run("returns error when store query fails", func(t *testing.T) {
+		auditStore := &mocks.AuditStoreMock{
+			QueryAuditFunc: func(_ context.Context, _ store.AuditQuery) ([]store.AuditEntry, int, error) {
+				return nil, 0, assert.AnError
+			},
+		}
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "admin", true },
+			HasTokenACLFunc:    func(_ string) bool { return false },
+			IsAdminFunc:        func(username string) bool { return username == "admin" },
+		}
+		handler := NewAuditHandler(auditStore, auth, 100)
+
+		req := httptest.NewRequest(http.MethodPost, "/audit/query", strings.NewReader(`{}`))
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "admin-session"})
+		rec := httptest.NewRecorder()
+
+		handler.HandleQuery(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "failed to query audit log")
+	})
 }
 
 func TestNewAuditHandler(t *testing.T) {

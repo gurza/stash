@@ -52,6 +52,22 @@ func TestAudit_NonAdminNoAccess(t *testing.T) {
 	assert.False(t, visible, "readonly user should not see audit link")
 }
 
+func TestAudit_NonAdminDirectURLAccess(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "readonly", "testpass")
+
+	// try to navigate directly to audit page
+	resp, err := page.Goto(baseURL + "/audit")
+	require.NoError(t, err)
+
+	// should return 403 Forbidden
+	assert.Equal(t, 403, resp.Status(), "non-admin direct URL access should return 403")
+
+	// verify error message is shown
+	errorMsg := page.Locator(`text=Admin access required`)
+	waitVisible(t, errorMsg)
+}
+
 func TestAudit_LogsActions(t *testing.T) {
 	page := newPage(t)
 	login(t, page, "admin", "testpass")

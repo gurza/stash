@@ -195,6 +195,7 @@ users:
 
 tokens:
   - token: "a4f8d9e2-7c3b-4a1f-9e2d-8c7b6a5f4e3d"
+    admin: true  # grants admin privileges (audit log access)
     permissions:
       - prefix: "app1/*"
         access: rw

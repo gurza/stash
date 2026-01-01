@@ -124,7 +124,7 @@ List endpoint returns only keys the caller has read permission for when auth is 
 POST   /audit/query              # query audit log (requires admin, JSON body with filters)
 ```
 
-Audit logging is enabled with `--audit.enabled`. Tracks read, update, delete actions on /kv/* routes.
+Audit logging is enabled with `--audit.enabled`. Tracks read, create, update, delete actions on /kv/* routes.
 Query filters: key (prefix with `*`), actor, actor_type, action, result, from, to, limit.
 
 ## Web UI Routes

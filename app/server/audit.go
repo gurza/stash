@@ -34,6 +34,7 @@ type AuditAuth interface {
 	GetSessionUser(ctx context.Context, token string) (string, bool)
 	HasTokenACL(token string) bool
 	IsAdmin(username string) bool
+	IsTokenAdmin(token string) bool
 }
 
 // responseCapture wraps http.ResponseWriter to capture status code and bytes written.
@@ -161,7 +162,7 @@ func (a *auditor) buildEntry(r *http.Request, rc *responseCapture, key string) s
 }
 
 // extractActor extracts actor identity from request.
-// returns (actor name, actor type) - checks session cookie first, then X-Auth-Token header, then Bearer token.
+// returns (actor name, actor type) - checks session cookie first, then API token.
 func (a *auditor) extractActor(r *http.Request) (string, enum.ActorType) {
 	if a.auth == nil {
 		return "anonymous", enum.ActorTypePublic
@@ -178,33 +179,14 @@ func (a *auditor) extractActor(r *http.Request) (string, enum.ActorType) {
 		}
 	}
 
-	// check X-Auth-Token header first (preferred for API)
-	if token := r.Header.Get("X-Auth-Token"); token != "" {
+	// check API token (X-Auth-Token or Bearer)
+	if token := ExtractToken(r); token != "" {
 		if a.auth.HasTokenACL(token) {
-			return a.maskToken(token), enum.ActorTypeToken
-		}
-	}
-
-	// check API token from Authorization header
-	authHeader := r.Header.Get("Authorization")
-	if token, found := strings.CutPrefix(authHeader, "Bearer "); found {
-		if a.auth.HasTokenACL(token) {
-			return a.maskToken(token), enum.ActorTypeToken
+			return "token:" + maskToken(token), enum.ActorTypeToken
 		}
 	}
 
 	return "anonymous", enum.ActorTypePublic
-}
-
-// maskToken masks a token for audit log display (shows first 4 chars).
-func (a *auditor) maskToken(token string) string {
-	masked := token
-	if len(masked) > 4 {
-		masked = masked[:4] + "****"
-	} else {
-		masked = "****"
-	}
-	return "token:" + masked
 }
 
 // mapAction maps HTTP method and response status to audit action.
@@ -288,31 +270,41 @@ type AuditQueryResponse struct {
 }
 
 // HandleQuery handles POST /audit/query requests.
-// Requires admin privileges.
+// Requires admin privileges via session cookie or API token with admin flag.
 func (h *AuditHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
-	// check admin access via session cookie
-	username := ""
+	// check admin access via session cookie first
 	for _, cookieName := range cookie.SessionCookieNames {
 		c, err := r.Cookie(cookieName)
 		if err != nil {
 			continue
 		}
-		if u, valid := h.auth.GetSessionUser(r.Context(), c.Value); valid {
-			username = u
-			break
+		if username, valid := h.auth.GetSessionUser(r.Context(), c.Value); valid {
+			if h.auth.IsAdmin(username) {
+				h.handleQueryInternal(w, r)
+				return
+			}
+			rest.SendErrorJSON(w, r, log.Default(), http.StatusForbidden, nil, "admin access required")
+			return
 		}
 	}
 
-	if username == "" {
-		rest.SendErrorJSON(w, r, log.Default(), http.StatusUnauthorized, nil, "unauthorized")
-		return
+	// check API token (X-Auth-Token or Bearer)
+	if token := ExtractToken(r); token != "" {
+		if h.auth.IsTokenAdmin(token) {
+			h.handleQueryInternal(w, r)
+			return
+		}
+		if h.auth.HasTokenACL(token) {
+			rest.SendErrorJSON(w, r, log.Default(), http.StatusForbidden, nil, "admin access required")
+			return
+		}
 	}
 
-	if !h.auth.IsAdmin(username) {
-		rest.SendErrorJSON(w, r, log.Default(), http.StatusForbidden, nil, "admin access required")
-		return
-	}
+	rest.SendErrorJSON(w, r, log.Default(), http.StatusUnauthorized, nil, "unauthorized")
+}
 
+// handleQueryInternal performs the actual audit query after auth is verified.
+func (h *AuditHandler) handleQueryInternal(w http.ResponseWriter, r *http.Request) {
 	// parse request body
 	var req AuditQueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

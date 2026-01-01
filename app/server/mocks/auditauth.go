@@ -23,6 +23,9 @@ import (
 //			IsAdminFunc: func(username string) bool {
 //				panic("mock out the IsAdmin method")
 //			},
+//			IsTokenAdminFunc: func(token string) bool {
+//				panic("mock out the IsTokenAdmin method")
+//			},
 //		}
 //
 //		// use mockedAuditAuth in code that requires server.AuditAuth
@@ -38,6 +41,9 @@ type AuditAuthMock struct {
 
 	// IsAdminFunc mocks the IsAdmin method.
 	IsAdminFunc func(username string) bool
+
+	// IsTokenAdminFunc mocks the IsTokenAdmin method.
+	IsTokenAdminFunc func(token string) bool
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -58,10 +64,16 @@ type AuditAuthMock struct {
 			// Username is the username argument value.
 			Username string
 		}
+		// IsTokenAdmin holds details about calls to the IsTokenAdmin method.
+		IsTokenAdmin []struct {
+			// Token is the token argument value.
+			Token string
+		}
 	}
 	lockGetSessionUser sync.RWMutex
 	lockHasTokenACL    sync.RWMutex
 	lockIsAdmin        sync.RWMutex
+	lockIsTokenAdmin   sync.RWMutex
 }
 
 // GetSessionUser calls GetSessionUserFunc.
@@ -161,5 +173,37 @@ func (mock *AuditAuthMock) IsAdminCalls() []struct {
 	mock.lockIsAdmin.RLock()
 	calls = mock.calls.IsAdmin
 	mock.lockIsAdmin.RUnlock()
+	return calls
+}
+
+// IsTokenAdmin calls IsTokenAdminFunc.
+func (mock *AuditAuthMock) IsTokenAdmin(token string) bool {
+	if mock.IsTokenAdminFunc == nil {
+		panic("AuditAuthMock.IsTokenAdminFunc: method is nil but AuditAuth.IsTokenAdmin was just called")
+	}
+	callInfo := struct {
+		Token string
+	}{
+		Token: token,
+	}
+	mock.lockIsTokenAdmin.Lock()
+	mock.calls.IsTokenAdmin = append(mock.calls.IsTokenAdmin, callInfo)
+	mock.lockIsTokenAdmin.Unlock()
+	return mock.IsTokenAdminFunc(token)
+}
+
+// IsTokenAdminCalls gets all the calls that were made to IsTokenAdmin.
+// Check the length with:
+//
+//	len(mockedAuditAuth.IsTokenAdminCalls())
+func (mock *AuditAuthMock) IsTokenAdminCalls() []struct {
+	Token string
+} {
+	var calls []struct {
+		Token string
+	}
+	mock.lockIsTokenAdmin.RLock()
+	calls = mock.calls.IsTokenAdmin
+	mock.lockIsTokenAdmin.RUnlock()
 	return calls
 }

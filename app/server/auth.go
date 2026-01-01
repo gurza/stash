@@ -45,6 +45,7 @@ type UserConfig struct {
 // TokenConfig represents an API token in the auth config file.
 type TokenConfig struct {
 	Token       string             `yaml:"token" json:"token" jsonschema:"required"`
+	Admin       bool               `yaml:"admin,omitempty" json:"admin,omitempty" jsonschema:"description=grants admin privileges (audit access)"`
 	Permissions []PermissionConfig `yaml:"permissions,omitempty" json:"permissions,omitempty"`
 }
 
@@ -91,6 +92,7 @@ type prefixPerm struct {
 // TokenACL defines access control for an API token.
 type TokenACL struct {
 	Token    string
+	Admin    bool         // grants admin privileges (audit access)
 	prefixes []prefixPerm // sorted by prefix length descending for longest-match-first
 }
 
@@ -210,6 +212,7 @@ func parseTokenConfigs(configs []TokenConfig) (map[string]TokenACL, *TokenACL, e
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid permissions for token %q: %w", maskToken(tc.Token), err)
 		}
+		acl.Admin = tc.Admin
 
 		// token "*" is treated as public access (no auth required)
 		if tc.Token == "*" {
@@ -698,6 +701,20 @@ func (a *Auth) IsAdmin(username string) bool {
 	return user.Admin
 }
 
+// IsTokenAdmin checks if an API token has admin privileges.
+func (a *Auth) IsTokenAdmin(token string) bool {
+	if a == nil || !a.Enabled() {
+		return false
+	}
+	a.mu.RLock()
+	acl, exists := a.tokens[token]
+	a.mu.RUnlock()
+	if !exists {
+		return false
+	}
+	return acl.Admin
+}
+
 // ValidateSession checks if a session token is valid and not expired.
 // Note: expiration is checked in store.GetSession, which returns ErrNotFound for expired sessions.
 func (a *Auth) ValidateSession(ctx context.Context, token string) bool {
@@ -831,13 +848,8 @@ func (a *Auth) TokenAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// check X-Auth-Token header or Bearer token
-		token := r.Header.Get("X-Auth-Token")
-		if token == "" {
-			if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
-				token = strings.TrimPrefix(authHeader, "Bearer ")
-			}
-		}
+		// check API token (X-Auth-Token or Bearer)
+		token := ExtractToken(r)
 		if token == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -876,4 +888,19 @@ func maskToken(token string) string {
 		return "****"
 	}
 	return token[:4] + "****"
+}
+
+// ExtractToken extracts API token from request headers.
+// Checks X-Auth-Token header first, then Authorization: Bearer header.
+// Returns the token string (may be empty if not found).
+func ExtractToken(r *http.Request) string {
+	// check X-Auth-Token header first (preferred for API)
+	if token := r.Header.Get("X-Auth-Token"); token != "" {
+		return token
+	}
+	// check Bearer token
+	if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+		return strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	return ""
 }
