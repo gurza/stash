@@ -278,6 +278,8 @@ func TestSecrets_FilterToggle(t *testing.T) {
 	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill("regular value"))
 	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
 	waitHidden(t, modal)
+	// wait for key to appear in table (positive confirmation HTMX swap completed)
+	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, regularKeyName)))
 
 	// create a secret key
 	secretKeyName := "secrets/filter-test"
@@ -287,6 +289,8 @@ func TestSecrets_FilterToggle(t *testing.T) {
 	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill("secret value"))
 	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
 	waitHidden(t, modal)
+	// wait for key to appear in table (positive confirmation HTMX swap completed)
+	waitVisible(t, page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, secretKeyName)))
 
 	// verify both keys are visible (All filter - default)
 	filterButton := page.Locator(".filter-button")
