@@ -33,6 +33,9 @@ import (
 //			InvalidateSessionFunc: func(ctx context.Context, token string)  {
 //				panic("mock out the InvalidateSession method")
 //			},
+//			IsAdminFunc: func(username string) bool {
+//				panic("mock out the IsAdmin method")
+//			},
 //			IsValidUserFunc: func(username string, password string) bool {
 //				panic("mock out the IsValidUser method")
 //			},
@@ -66,6 +69,9 @@ type AuthProviderMock struct {
 
 	// InvalidateSessionFunc mocks the InvalidateSession method.
 	InvalidateSessionFunc func(ctx context.Context, token string)
+
+	// IsAdminFunc mocks the IsAdmin method.
+	IsAdminFunc func(username string) bool
 
 	// IsValidUserFunc mocks the IsValidUser method.
 	IsValidUserFunc func(username string, password string) bool
@@ -118,6 +124,11 @@ type AuthProviderMock struct {
 			// Token is the token argument value.
 			Token string
 		}
+		// IsAdmin holds details about calls to the IsAdmin method.
+		IsAdmin []struct {
+			// Username is the username argument value.
+			Username string
+		}
 		// IsValidUser holds details about calls to the IsValidUser method.
 		IsValidUser []struct {
 			// Username is the username argument value.
@@ -140,6 +151,7 @@ type AuthProviderMock struct {
 	lockFilterUserKeys      sync.RWMutex
 	lockGetSessionUser      sync.RWMutex
 	lockInvalidateSession   sync.RWMutex
+	lockIsAdmin             sync.RWMutex
 	lockIsValidUser         sync.RWMutex
 	lockLoginTTL            sync.RWMutex
 	lockUserCanWrite        sync.RWMutex
@@ -353,6 +365,38 @@ func (mock *AuthProviderMock) InvalidateSessionCalls() []struct {
 	mock.lockInvalidateSession.RLock()
 	calls = mock.calls.InvalidateSession
 	mock.lockInvalidateSession.RUnlock()
+	return calls
+}
+
+// IsAdmin calls IsAdminFunc.
+func (mock *AuthProviderMock) IsAdmin(username string) bool {
+	if mock.IsAdminFunc == nil {
+		panic("AuthProviderMock.IsAdminFunc: method is nil but AuthProvider.IsAdmin was just called")
+	}
+	callInfo := struct {
+		Username string
+	}{
+		Username: username,
+	}
+	mock.lockIsAdmin.Lock()
+	mock.calls.IsAdmin = append(mock.calls.IsAdmin, callInfo)
+	mock.lockIsAdmin.Unlock()
+	return mock.IsAdminFunc(username)
+}
+
+// IsAdminCalls gets all the calls that were made to IsAdmin.
+// Check the length with:
+//
+//	len(mockedAuthProvider.IsAdminCalls())
+func (mock *AuthProviderMock) IsAdminCalls() []struct {
+	Username string
+} {
+	var calls []struct {
+		Username string
+	}
+	mock.lockIsAdmin.RLock()
+	calls = mock.calls.IsAdmin
+	mock.lockIsAdmin.RUnlock()
 	return calls
 }
 

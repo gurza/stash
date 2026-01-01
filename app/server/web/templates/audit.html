@@ -1,0 +1,143 @@
+{{define "audit.html"}}
+<!DOCTYPE html>
+<html lang="en" {{if .Theme}}data-theme="{{.Theme.String}}"{{end}}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Log - Stash</title>
+    <link rel="icon" type="image/svg+xml" href="{{.BaseURL}}/static/favicon.svg">
+    <link rel="stylesheet" href="{{.BaseURL}}/static/style.css">
+    <script src="{{.BaseURL}}/static/htmx.min.js"></script>
+    <script>window.BASE_URL = "{{.BaseURL}}";</script>
+</head>
+<body>
+    <div class="container">
+        <div class="audit-header">
+            <h1>
+                <svg class="audit-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 21q-3.45 0-6.012-2.287T3.05 13H5.1q.35 2.6 2.313 4.3T12 19q2.925 0 4.963-2.037T19 12t-2.037-4.962T12 5q-1.725 0-3.225.8T6.25 8H9v2H3V4h2v2.35q1.275-1.6 3.113-2.475T12 3q1.875 0 3.513.713t2.85 1.924t1.925 2.85T21 12t-.712 3.513t-1.925 2.85t-2.85 1.925T12 21m2.8-4.8L11 12.4V7h2v4.6l3.2 3.2z"/></svg>
+                Audit Log
+            </h1>
+            <div class="header-actions">
+                <a href="{{.BaseURL}}/" class="btn-icon" title="Back to keys">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <form hx-post="{{.BaseURL}}/web/theme" hx-swap="none">
+                    <button type="submit" class="btn-icon" title="Toggle theme">
+                        {{if eq .Theme.String "dark"}}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                        {{else}}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                        {{end}}
+                    </button>
+                </form>
+                {{if .AuthEnabled}}
+                <form method="POST" action="{{.BaseURL}}/logout">
+                    <button type="submit" class="btn-icon" title="Logout">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                    </button>
+                </form>
+                {{end}}
+            </div>
+        </div>
+
+        <div class="filter-panel">
+            <button class="filter-toggle" type="button" onclick="toggleFilters()" aria-expanded="true">
+                <span>Filters</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M6 9l6 6 6-6"/>
+                </svg>
+            </button>
+            <form id="audit-filter-form" class="filter-form" hx-get="{{.BaseURL}}/web/audit" hx-target="#audit-table" hx-swap="innerHTML" hx-trigger="submit">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label for="key">Key prefix</label>
+                        <input type="text" id="key" name="key" value="{{.Key}}" placeholder="e.g., app/*">
+                    </div>
+                    <div class="filter-group">
+                        <label for="actor">Actor</label>
+                        <input type="text" id="actor" name="actor" value="{{.Actor}}" placeholder="username or token:...">
+                    </div>
+                    <div class="filter-group">
+                        <label for="action">Action</label>
+                        <select id="action" name="action">
+                            <option value=""{{if eq .Action ""}} selected{{end}}>All</option>
+                            <option value="read"{{if eq .Action "read"}} selected{{end}}>Read</option>
+                            <option value="create"{{if eq .Action "create"}} selected{{end}}>Create</option>
+                            <option value="update"{{if eq .Action "update"}} selected{{end}}>Update</option>
+                            <option value="delete"{{if eq .Action "delete"}} selected{{end}}>Delete</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="result">Result</label>
+                        <select id="result" name="result">
+                            <option value=""{{if eq .Result ""}} selected{{end}}>All</option>
+                            <option value="success"{{if eq .Result "success"}} selected{{end}}>Success</option>
+                            <option value="denied"{{if eq .Result "denied"}} selected{{end}}>Denied</option>
+                            <option value="not_found"{{if eq .Result "not_found"}} selected{{end}}>Not Found</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="actor_type">Actor Type</label>
+                        <select id="actor_type" name="actor_type">
+                            <option value=""{{if eq .ActorType ""}} selected{{end}}>All</option>
+                            <option value="user"{{if eq .ActorType "user"}} selected{{end}}>User</option>
+                            <option value="token"{{if eq .ActorType "token"}} selected{{end}}>Token</option>
+                            <option value="public"{{if eq .ActorType "public"}} selected{{end}}>Public</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label for="from">From</label>
+                        <input type="datetime-local" id="from" name="from" value="{{.From}}">
+                    </div>
+                    <div class="filter-group">
+                        <label for="to">To</label>
+                        <input type="datetime-local" id="to" name="to" value="{{.To}}">
+                    </div>
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary">Apply</button>
+                        <a href="{{.BaseURL}}/audit" class="btn btn-secondary">Clear</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="stats">
+            <span id="entry-count">{{if eq .Total 0}}no entries{{else}}{{.Total}} {{if eq .Total 1}}entry{{else}}entries{{end}}{{end}}</span>
+            <span id="pagination" class="pagination">
+                {{if gt .TotalPages 1}}
+                <button class="btn-page{{if not .HasPrev}} disabled{{end}}"
+                        {{if .HasPrev}}hx-get="{{.BaseURL}}/web/audit?page={{sub .Page 1}}&key={{.Key}}&actor={{.Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
+                        hx-target="#audit-table"
+                        hx-swap="innerHTML"{{end}}>&#8249;</button>
+                <span class="page-info">{{.Page}} / {{.TotalPages}}</span>
+                <button class="btn-page{{if not .HasNext}} disabled{{end}}"
+                        {{if .HasNext}}hx-get="{{.BaseURL}}/web/audit?page={{add .Page 1}}&key={{.Key}}&actor={{.Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
+                        hx-target="#audit-table"
+                        hx-swap="innerHTML"{{end}}>&#8250;</button>
+                {{end}}
+            </span>
+        </div>
+
+        <div class="table-container">
+            <div id="audit-table">
+                {{template "audit-table" .}}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleFilters() {
+            const toggle = document.querySelector('.filter-toggle');
+            const form = document.querySelector('.filter-form');
+            const expanded = toggle.getAttribute('aria-expanded') === 'true';
+            toggle.setAttribute('aria-expanded', !expanded);
+            form.style.display = expanded ? 'none' : 'block';
+        }
+    </script>
+</body>
+</html>
+{{end}}

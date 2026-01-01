@@ -869,7 +869,7 @@ func TestHandler_HandleKeyRestore(t *testing.T) {
 			CheckUserPermissionFunc: func(username, key string, write bool) bool { return !write }, // read only
 			UserCanWriteFunc:        func(username string) bool { return false },
 		}
-		h, err := New(st, auth, defaultValidatorMock(), gitSvc, Config{})
+		h, err := New(st, auth, defaultValidatorMock(), gitSvc, nil, Config{})
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodPost, "/web/keys/restore/test-key", strings.NewReader("rev=abc1234"))
@@ -899,7 +899,7 @@ func TestHandler_HandleKeyRestore(t *testing.T) {
 			CheckUserPermissionFunc: func(username, key string, write bool) bool { return true },
 			UserCanWriteFunc:        func(username string) bool { return true },
 		}
-		h, err := New(st, auth, defaultValidatorMock(), gitSvc, Config{})
+		h, err := New(st, auth, defaultValidatorMock(), gitSvc, nil, Config{})
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodPost, "/web/keys/restore/test-key", strings.NewReader("rev=abc1234"))
@@ -1030,7 +1030,7 @@ func TestHandler_SecretsNotConfigured(t *testing.T) {
 			SecretsEnabledFunc: func() bool { return false },
 		}
 		auth := &mocks.AuthProviderMock{CheckUserPermissionFunc: func(string, string, bool) bool { return true }}
-		h, err := New(st, auth, defaultValidatorMock(), gitSvc, Config{})
+		h, err := New(st, auth, defaultValidatorMock(), gitSvc, nil, Config{})
 		require.NoError(t, err)
 
 		body := "rev=abc123"
@@ -1048,7 +1048,7 @@ func TestHandler_SecretsNotConfigured(t *testing.T) {
 // newTestHandlerWithStoreAndAuth creates a test handler with custom store and auth.
 func newTestHandlerWithStoreAndAuth(t *testing.T, st KVStore, auth AuthProvider) *Handler {
 	t.Helper()
-	h, err := New(st, auth, defaultValidatorMock(), nil, Config{})
+	h, err := New(st, auth, defaultValidatorMock(), nil, nil, Config{})
 	require.NoError(t, err)
 	return h
 }
@@ -1056,7 +1056,111 @@ func newTestHandlerWithStoreAndAuth(t *testing.T, st KVStore, auth AuthProvider)
 // newTestHandlerWithAll creates a test handler with all custom dependencies.
 func newTestHandlerWithAll(t *testing.T, st KVStore, val Validator, auth AuthProvider) *Handler {
 	t.Helper()
-	h, err := New(st, auth, val, nil, Config{})
+	h, err := New(st, auth, val, nil, nil, Config{})
 	require.NoError(t, err)
 	return h
+}
+
+func TestHandler_AuditLogging(t *testing.T) {
+	var capturedEntries []store.AuditEntry
+	auditLogger := &mocks.AuditLoggerMock{
+		LogAuditFunc: func(_ context.Context, entry store.AuditEntry) error {
+			capturedEntries = append(capturedEntries, entry)
+			return nil
+		},
+	}
+
+	st := &mocks.KVStoreMock{
+		ListFunc:           func(context.Context, enum.SecretsFilter) ([]store.KeyInfo, error) { return nil, nil },
+		SecretsEnabledFunc: func() bool { return false },
+		GetWithFormatFunc: func(_ context.Context, key string) ([]byte, string, error) {
+			if key == "existing" {
+				return []byte("value"), "text", nil
+			}
+			return nil, "", store.ErrNotFound
+		},
+		SetFunc:            func(_ context.Context, key string, value []byte, format string) (bool, error) { return true, nil },
+		SetWithVersionFunc: func(_ context.Context, key string, value []byte, format string, _ time.Time) error { return nil },
+		DeleteFunc:         func(_ context.Context, key string) error { return nil },
+	}
+	auth := &mocks.AuthProviderMock{
+		EnabledFunc:             func() bool { return true },
+		GetSessionUserFunc:      func(_ context.Context, token string) (string, bool) { return "testuser", true },
+		FilterUserKeysFunc:      func(username string, keys []string) []string { return keys },
+		CheckUserPermissionFunc: func(username, key string, write bool) bool { return true },
+		UserCanWriteFunc:        func(username string) bool { return true },
+	}
+
+	h, err := New(st, auth, defaultValidatorMock(), nil, auditLogger, Config{})
+	require.NoError(t, err)
+
+	t.Run("create logs audit entry", func(t *testing.T) {
+		capturedEntries = nil
+		body := "key=newkey&value=newvalue&format=text"
+		req := httptest.NewRequest(http.MethodPost, "/web/keys", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "testtoken"})
+		rec := httptest.NewRecorder()
+		h.handleKeyCreate(rec, req)
+
+		require.Len(t, capturedEntries, 1)
+		assert.Equal(t, enum.AuditActionCreate, capturedEntries[0].Action)
+		assert.Equal(t, "newkey", capturedEntries[0].Key)
+		assert.Equal(t, "testuser", capturedEntries[0].Actor)
+		assert.Equal(t, enum.ActorTypeUser, capturedEntries[0].ActorType)
+		assert.Equal(t, enum.AuditResultSuccess, capturedEntries[0].Result)
+		require.NotNil(t, capturedEntries[0].ValueSize)
+		assert.Equal(t, len("newvalue"), *capturedEntries[0].ValueSize)
+	})
+
+	t.Run("update logs audit entry", func(t *testing.T) {
+		capturedEntries = nil
+		body := "value=updatedvalue&format=text"
+		req := httptest.NewRequest(http.MethodPut, "/web/keys/existing", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetPathValue("key", "existing")
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "testtoken"})
+		rec := httptest.NewRecorder()
+		h.handleKeyUpdate(rec, req)
+
+		require.Len(t, capturedEntries, 1)
+		assert.Equal(t, enum.AuditActionUpdate, capturedEntries[0].Action)
+		assert.Equal(t, "existing", capturedEntries[0].Key)
+		assert.Equal(t, "testuser", capturedEntries[0].Actor)
+		assert.Equal(t, enum.AuditResultSuccess, capturedEntries[0].Result)
+		require.NotNil(t, capturedEntries[0].ValueSize)
+		assert.Equal(t, len("updatedvalue"), *capturedEntries[0].ValueSize)
+	})
+
+	t.Run("delete logs audit entry", func(t *testing.T) {
+		capturedEntries = nil
+		req := httptest.NewRequest(http.MethodDelete, "/web/keys/existing", http.NoBody)
+		req.SetPathValue("key", "existing")
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "testtoken"})
+		rec := httptest.NewRecorder()
+		h.handleKeyDelete(rec, req)
+
+		require.Len(t, capturedEntries, 1)
+		assert.Equal(t, enum.AuditActionDelete, capturedEntries[0].Action)
+		assert.Equal(t, "existing", capturedEntries[0].Key)
+		assert.Equal(t, "testuser", capturedEntries[0].Actor)
+		assert.Equal(t, enum.AuditResultSuccess, capturedEntries[0].Result)
+		assert.Nil(t, capturedEntries[0].ValueSize, "delete should not have value size")
+	})
+
+	t.Run("no audit when audit logger is nil", func(t *testing.T) {
+		// create handler without audit logger
+		hNoAudit, err := New(st, auth, defaultValidatorMock(), nil, nil, Config{})
+		require.NoError(t, err)
+
+		capturedEntries = nil
+		body := "key=testkey&value=testvalue&format=text"
+		req := httptest.NewRequest(http.MethodPost, "/web/keys", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "testtoken"})
+		rec := httptest.NewRecorder()
+		hNoAudit.handleKeyCreate(rec, req)
+
+		assert.Empty(t, capturedEntries, "no audit entries when audit logger is nil")
+	})
 }

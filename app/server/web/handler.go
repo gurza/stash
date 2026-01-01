@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/url"
 	"sort"
@@ -16,6 +17,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	log "github.com/go-pkgz/lgr"
+	"github.com/go-pkgz/rest/realip"
 	"github.com/go-pkgz/routegroup"
 
 	"github.com/umputun/stash/app/enum"
@@ -28,6 +31,7 @@ import (
 //go:generate moq -out mocks/validator.go -pkg mocks -skip-ensure -fmt goimports . Validator
 //go:generate moq -out mocks/authprovider.go -pkg mocks -skip-ensure -fmt goimports . AuthProvider
 //go:generate moq -out mocks/gitservice.go -pkg mocks -skip-ensure -fmt goimports . GitService
+//go:generate moq -out mocks/auditlogger.go -pkg mocks -skip-ensure -fmt goimports . AuditLogger
 
 //go:embed static
 var staticFS embed.FS
@@ -69,6 +73,7 @@ type AuthProvider interface {
 	FilterUserKeys(username string, keys []string) []string
 	CheckUserPermission(username, key string, write bool) bool
 	UserCanWrite(username string) bool
+	IsAdmin(username string) bool
 
 	IsValidUser(username, password string) bool
 	CreateSession(ctx context.Context, username string) (string, error)
@@ -84,40 +89,51 @@ type GitService interface {
 	GetRevision(key string, rev string) ([]byte, string, error)
 }
 
+// AuditLogger defines the interface for audit log storage.
+type AuditLogger interface {
+	LogAudit(ctx context.Context, entry store.AuditEntry) error
+}
+
 // Config holds web handler configuration.
 type Config struct {
-	BaseURL  string
-	PageSize int
+	BaseURL      string
+	PageSize     int
+	AuditEnabled bool
 }
 
 // Handler handles web UI requests.
 type Handler struct {
-	store       KVStore
-	validator   Validator
-	auth        AuthProvider
-	highlighter *Highlighter
-	tmpl        *template.Template
-	baseURL     string
-	pageSize    int
-	git         GitService
+	store        KVStore
+	validator    Validator
+	auth         AuthProvider
+	highlighter  *Highlighter
+	tmpl         *template.Template
+	baseURL      string
+	pageSize     int
+	auditEnabled bool
+	git          GitService
+	audit        AuditLogger
 }
 
 // New creates a new web handler.
-func New(st KVStore, auth AuthProvider, val Validator, gs GitService, cfg Config) (*Handler, error) {
+// auditLogger is optional, pass nil to disable audit logging in web handlers.
+func New(st KVStore, auth AuthProvider, val Validator, gs GitService, auditLogger AuditLogger, cfg Config) (*Handler, error) {
 	tmpl, err := parseTemplates()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
 
 	return &Handler{
-		store:       st,
-		validator:   val,
-		auth:        auth,
-		highlighter: NewHighlighter(),
-		tmpl:        tmpl,
-		baseURL:     cfg.BaseURL,
-		pageSize:    cfg.PageSize,
-		git:         gs,
+		store:        st,
+		validator:    val,
+		auth:         auth,
+		highlighter:  NewHighlighter(),
+		tmpl:         tmpl,
+		baseURL:      cfg.BaseURL,
+		pageSize:     cfg.PageSize,
+		auditEnabled: cfg.AuditEnabled,
+		git:          gs,
+		audit:        auditLogger,
 	}, nil
 }
 
@@ -159,7 +175,7 @@ func templateFuncs() template.FuncMap {
 		return strings.ToUpper(s[:1]) + s[1:]
 	}
 
-	return template.FuncMap{
+	funcs := template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04")
 		},
@@ -177,6 +193,11 @@ func templateFuncs() template.FuncMap {
 		"add":           func(a, b int) int { return a + b },
 		"sub":           func(a, b int) int { return a - b },
 	}
+
+	// add audit template functions
+	maps.Copy(funcs, AuditTemplateFuncs())
+
+	return funcs
 }
 
 // parseTemplates parses all templates from embedded filesystem.
@@ -213,8 +234,18 @@ func parseTemplates() (*template.Template, error) {
 		return nil, fmt.Errorf("parse index.html: %w", err)
 	}
 
+	// parse audit template
+	auditContent, err := templatesFS.ReadFile("templates/audit.html")
+	if err != nil {
+		return nil, fmt.Errorf("read audit.html: %w", err)
+	}
+	_, err = tmpl.New("audit.html").Parse(string(auditContent))
+	if err != nil {
+		return nil, fmt.Errorf("parse audit.html: %w", err)
+	}
+
 	// parse partials
-	partials := []string{"keys-table", "form", "view", "history", "revision", "error"}
+	partials := []string{"keys-table", "form", "view", "history", "revision", "error", "audit-table"}
 	for _, name := range partials {
 		content, readErr := templatesFS.ReadFile("templates/partials/" + name + ".html")
 		if readErr != nil {
@@ -290,10 +321,12 @@ type templateData struct {
 	CanForce bool // allow force submit despite error (for validation errors, not conflicts)
 
 	// auth and permissions
-	AuthEnabled bool
-	BaseURL     string
-	CanWrite    bool   // user has write permission (for showing edit controls)
-	Username    string // current logged-in username
+	AuthEnabled  bool
+	AuditEnabled bool // audit feature enabled (for showing audit link)
+	BaseURL      string
+	CanWrite     bool   // user has write permission (for showing edit controls)
+	Username     string // current logged-in username
+	IsAdmin      bool   // user has admin privileges
 
 	// modal sizing
 	ModalWidth     int
@@ -545,4 +578,38 @@ func (h *Handler) filterKeysByPermission(username string, keys []store.KeyInfo) 
 		}
 	}
 	return filtered
+}
+
+// logAudit logs an audit entry if audit logging is enabled.
+func (h *Handler) logAudit(r *http.Request, key string, action enum.AuditAction, result enum.AuditResult, valueSize *int) {
+	if h.audit == nil {
+		return
+	}
+
+	username := h.getCurrentUser(r)
+	actorType := enum.ActorTypePublic
+	actor := "anonymous"
+	if username != "" {
+		actor = username
+		actorType = enum.ActorTypeUser
+	}
+
+	ip, _ := realip.Get(r)
+
+	entry := store.AuditEntry{
+		Timestamp: time.Now(),
+		Action:    action,
+		Key:       key,
+		Actor:     actor,
+		ActorType: actorType,
+		Result:    result,
+		IP:        ip,
+		UserAgent: r.UserAgent(),
+		RequestID: r.Header.Get("X-Request-ID"),
+		ValueSize: valueSize,
+	}
+
+	if err := h.audit.LogAudit(r.Context(), entry); err != nil {
+		log.Printf("[WARN] failed to log audit entry for web operation: %v", err)
+	}
 }

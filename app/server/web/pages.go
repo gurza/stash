@@ -34,14 +34,16 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 	pr := h.paginate(filteredKeys, page, h.pageSize)
 
 	data := templateData{
-		Keys:        pr.keys,
-		Theme:       h.getTheme(r),
-		ViewMode:    h.getViewMode(r),
-		SortMode:    sortMode,
-		AuthEnabled: h.auth.Enabled(),
-		BaseURL:     h.baseURL,
-		CanWrite:    h.auth.UserCanWrite(username),
-		Username:    username,
+		Keys:         pr.keys,
+		Theme:        h.getTheme(r),
+		ViewMode:     h.getViewMode(r),
+		SortMode:     sortMode,
+		AuthEnabled:  h.auth.Enabled(),
+		AuditEnabled: h.auditEnabled,
+		BaseURL:      h.baseURL,
+		CanWrite:     h.auth.UserCanWrite(username),
+		Username:     username,
+		IsAdmin:      h.auth.IsAdmin(username),
 		paginationData: paginationData{
 			Page:       pr.page,
 			TotalPages: pr.totalPages,

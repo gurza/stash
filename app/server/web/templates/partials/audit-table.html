@@ -1,0 +1,37 @@
+{{define "audit-table"}}
+{{if .Error}}
+<div class="error-message">{{.Error}}</div>
+{{else if eq (len .Entries) 0}}
+<div class="empty-state">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <path d="M12 1C8.14 1 5 4.14 5 8c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h1v1a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1h1a1 1 0 0 0 1-1v-3.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/>
+    </svg>
+    <p>No audit entries found</p>
+</div>
+{{else}}
+<table class="audit-table">
+    <thead>
+        <tr>
+            <th class="col-time">Time</th>
+            <th class="col-action">Action</th>
+            <th class="col-key">Key</th>
+            <th class="col-actor">Actor</th>
+            <th class="col-result">Result</th>
+            <th class="col-size">Size</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Entries}}
+        <tr class="{{if eq .Result.String "denied"}}row-denied{{else if eq .Result.String "not_found"}}row-notfound{{end}}">
+            <td class="col-time" title="{{formatTime .Timestamp}}">{{relativeTime .Timestamp}}</td>
+            <td class="col-action"><span class="badge {{actionClass .Action}}">{{upper .Action.String}}</span></td>
+            <td class="col-key" title="{{.Key}}">{{.Key}}</td>
+            <td class="col-actor" title="{{.Actor}}">{{.Actor}}</td>
+            <td class="col-result"><span class="badge {{resultClass .Result}}">{{.Result.String}}</span></td>
+            <td class="col-size">{{if .ValueSize}}{{formatSize .ValueSize}}{{else}}-{{end}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}
+{{end}}

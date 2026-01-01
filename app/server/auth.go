@@ -783,8 +783,9 @@ func (a *Auth) SessionAuth(loginURL string) func(http.Handler) http.Handler {
 	}
 }
 
-// TokenAuth returns middleware that requires a valid Bearer token with appropriate permissions.
-// Used for API routes. Returns 401/403 if not authorized.
+// TokenAuth returns middleware that requires a valid token with appropriate permissions.
+// Accepts X-Auth-Token header or Authorization: Bearer <token>. Used for API routes.
+// Returns 401/403 if not authorized.
 // Public access (token="*") is checked first and allows unauthenticated requests.
 // For list operations (empty key), only validates token existence, filtering happens in handler.
 func (a *Auth) TokenAuth(next http.Handler) http.Handler {
@@ -830,14 +831,17 @@ func (a *Auth) TokenAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// check Bearer token
-		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
+		// check X-Auth-Token header or Bearer token
+		token := r.Header.Get("X-Auth-Token")
+		if token == "" {
+			if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimPrefix(authHeader, "Bearer ")
+			}
+		}
+		if token == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-
-		token := strings.TrimPrefix(authHeader, "Bearer ")
 
 		// check if token exists
 		if _, ok := a.GetTokenACL(token); !ok {

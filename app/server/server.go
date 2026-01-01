@@ -27,17 +27,18 @@ import (
 
 // Server represents the HTTP server.
 type Server struct {
-	store        KVStore
-	auditStore   AuditStore
-	validator    Validator // format validator
-	cfg          Config
-	version      string
-	baseURL      string
-	auth         *Auth
-	apiHandler   *api.Handler
-	webHandler   *web.Handler
-	auditHandler *AuditHandler
-	staticFS     fs.FS // embedded static files
+	store           KVStore
+	auditStore      AuditStore
+	validator       Validator // format validator
+	cfg             Config
+	version         string
+	baseURL         string
+	auth            *Auth
+	apiHandler      *api.Handler
+	webHandler      *web.Handler
+	auditHandler    *AuditHandler
+	webAuditHandler *web.AuditHandler
+	staticFS        fs.FS // embedded static files
 }
 
 // KVStore defines the interface for key-value storage operations.
@@ -115,10 +116,15 @@ func New(st KVStore, val Validator, gs GitService, ss SessionStore, as AuditStor
 		staticFS:   staticContent,
 	}
 
-	// create web handler
-	webHandler, err := web.New(st, auth, val, gs, web.Config{
-		BaseURL:  cfg.BaseURL,
-		PageSize: cfg.PageSize,
+	// create web handler with optional audit logger
+	var webAuditLogger web.AuditLogger
+	if cfg.AuditEnabled && as != nil {
+		webAuditLogger = as
+	}
+	webHandler, err := web.New(st, auth, val, gs, webAuditLogger, web.Config{
+		BaseURL:      cfg.BaseURL,
+		PageSize:     cfg.PageSize,
+		AuditEnabled: cfg.AuditEnabled && as != nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create web handler: %w", err)
@@ -128,9 +134,10 @@ func New(st KVStore, val Validator, gs GitService, ss SessionStore, as AuditStor
 	// create api handler
 	s.apiHandler = api.New(st, auth, val, gs)
 
-	// create audit handler if audit is enabled
+	// create audit handlers if audit is enabled
 	if cfg.AuditEnabled && as != nil {
 		s.auditHandler = NewAuditHandler(as, auth, cfg.AuditQueryLimit)
+		s.webAuditHandler = web.NewAuditHandler(as, auth, webHandler)
 	}
 
 	return s, nil
@@ -236,6 +243,12 @@ func (s *Server) routes() http.Handler {
 	router.Group().Route(func(webRouter *routegroup.Bundle) {
 		webRouter.Use(sessionAuth)
 		s.webHandler.Register(webRouter)
+
+		// audit web UI routes (admin only, handled inside handler)
+		if s.webAuditHandler != nil {
+			webRouter.HandleFunc("GET /audit", s.webAuditHandler.HandleAuditPage)
+			webRouter.HandleFunc("GET /web/audit", s.webAuditHandler.HandleAuditTable)
+		}
 	})
 
 	// kv API routes (audit wraps auth to capture denied requests)

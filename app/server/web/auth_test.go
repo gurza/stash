@@ -167,8 +167,9 @@ func newTestHandlerWithStore(t *testing.T, st KVStore) *Handler {
 		FilterUserKeysFunc:      func(username string, keys []string) []string { return keys },
 		CheckUserPermissionFunc: func(username, key string, write bool) bool { return true },
 		UserCanWriteFunc:        func(username string) bool { return true },
+		IsAdminFunc:             func(username string) bool { return false },
 	}
-	h, err := New(st, auth, defaultValidatorMock(), nil, Config{})
+	h, err := New(st, auth, defaultValidatorMock(), nil, nil, Config{})
 	require.NoError(t, err)
 	return h
 }

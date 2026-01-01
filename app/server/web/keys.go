@@ -12,6 +12,7 @@ import (
 
 	log "github.com/go-pkgz/lgr"
 
+	"github.com/umputun/stash/app/enum"
 	"github.com/umputun/stash/app/git"
 	"github.com/umputun/stash/app/store"
 	"github.com/umputun/stash/lib/stash"
@@ -335,6 +336,8 @@ func (h *Handler) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[INFO] create %q (%d bytes, format=%s) by %s", key, len(value), format, h.getIdentityForLog(r))
+	valueSize := len(value)
+	h.logAudit(r, key, enum.AuditActionCreate, enum.AuditResultSuccess, &valueSize)
 	h.commitToGit(key, value, "set", format, username)
 	h.handleKeyList(w, r) // return updated keys table
 }
@@ -443,6 +446,8 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[INFO] update %q (%d bytes, format=%s) by %s", key, len(value), format, h.getIdentityForLog(r))
+	valueSize := len(value)
+	h.logAudit(r, key, enum.AuditActionUpdate, enum.AuditResultSuccess, &valueSize)
 	h.commitToGit(key, value, "set", format, username)
 	h.handleKeyList(w, r) // return updated keys table
 }
@@ -469,6 +474,7 @@ func (h *Handler) handleKeyDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[INFO] delete %q by %s", key, h.getIdentityForLog(r))
+	h.logAudit(r, key, enum.AuditActionDelete, enum.AuditResultSuccess, nil)
 
 	// delete from git if enabled
 	if h.git != nil {
@@ -619,6 +625,8 @@ func (h *Handler) handleKeyRestore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[INFO] restore %q to revision %s by %s", key, rev, h.getIdentityForLog(r))
+	valueSize := len(value)
+	h.logAudit(r, key, enum.AuditActionUpdate, enum.AuditResultSuccess, &valueSize)
 	h.commitToGit(key, value, "restore", format, username)
 	h.handleKeyList(w, r) // return updated keys table
 }

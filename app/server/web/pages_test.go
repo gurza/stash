@@ -62,8 +62,9 @@ func TestHandler_HandleIndex_WithPagination(t *testing.T) {
 		FilterUserKeysFunc:      func(username string, keys []string) []string { return keys },
 		CheckUserPermissionFunc: func(username, key string, write bool) bool { return true },
 		UserCanWriteFunc:        func(username string) bool { return true },
+		IsAdminFunc:             func(username string) bool { return false },
 	}
-	h, err := New(st, auth, defaultValidatorMock(), nil, Config{PageSize: 3})
+	h, err := New(st, auth, defaultValidatorMock(), nil, nil, Config{PageSize: 3})
 	require.NoError(t, err)
 
 	t.Run("first page", func(t *testing.T) {

@@ -793,6 +793,20 @@ tokens:
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
+	// with valid X-Auth-Token should pass
+	req = httptest.NewRequest("GET", "/kv/test", http.NoBody)
+	req.Header.Set("X-Auth-Token", "apitoken")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// with invalid X-Auth-Token should return 401
+	req = httptest.NewRequest("GET", "/kv/test", http.NoBody)
+	req.Header.Set("X-Auth-Token", "invalid")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
 	// with invalid token should return 401
 	req = httptest.NewRequest("GET", "/kv/test", http.NoBody)
 	req.Header.Set("Authorization", "Bearer invalid")

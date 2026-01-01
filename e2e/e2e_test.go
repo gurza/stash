@@ -63,6 +63,7 @@ func TestMain(m *testing.M) {
 		"--auth.file="+authFile,
 		"--git.enabled",
 		"--git.path="+testGitPath,
+		"--audit.enabled",
 	)
 	serverCmd.Dir = ".."
 	if err := serverCmd.Start(); err != nil {

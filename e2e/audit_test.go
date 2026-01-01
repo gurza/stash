@@ -1,0 +1,186 @@
+//go:build e2e
+
+package e2e
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestAudit_AdminAccess(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "admin", "testpass")
+
+	// admin should see audit icon in header
+	auditLink := page.Locator(`a[href="/audit"]`)
+	waitVisible(t, auditLink)
+
+	// click audit link
+	require.NoError(t, auditLink.Click())
+
+	// should navigate to audit page
+	require.NoError(t, page.WaitForURL(baseURL+"/audit"))
+
+	// page should have audit header
+	header := page.Locator(`.audit-header h1:has-text("Audit Log")`)
+	waitVisible(t, header)
+
+	// filter panel should be visible
+	filterPanel := page.Locator(".filter-panel")
+	waitVisible(t, filterPanel)
+
+	// table container should be visible
+	tableContainer := page.Locator(".table-container")
+	waitVisible(t, tableContainer)
+}
+
+func TestAudit_NonAdminNoAccess(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "readonly", "testpass")
+
+	// non-admin should NOT see audit icon in header
+	auditLink := page.Locator(`a[href="/audit"]`)
+	visible, err := auditLink.IsVisible()
+	require.NoError(t, err)
+	assert.False(t, visible, "readonly user should not see audit link")
+}
+
+func TestAudit_LogsActions(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "admin", "testpass")
+
+	// navigate to audit page
+	_, err := page.Goto(baseURL + "/audit")
+	require.NoError(t, err)
+
+	// wait for page to load - either table or empty state
+	waitVisible(t, page.Locator(`.audit-header h1:has-text("Audit Log")`))
+
+	// verify filter panel exists
+	filterPanel := page.Locator(".filter-panel")
+	waitVisible(t, filterPanel)
+
+	// verify table container exists (may have .audit-table or .empty-state inside)
+	tableContainer := page.Locator(".table-container")
+	waitVisible(t, tableContainer)
+}
+
+func TestAudit_WebUIActionsLogged(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "admin", "testpass")
+
+	// create a unique key via web UI
+	testKey := "audit-test/webui-key"
+
+	// click new key button
+	newBtn := page.Locator(`button:has-text("New Key")`)
+	waitVisible(t, newBtn)
+	require.NoError(t, newBtn.Click())
+
+	// fill in the form
+	keyInput := page.Locator(`#modal-content input[name="key"]`)
+	waitVisible(t, keyInput)
+	require.NoError(t, keyInput.Fill(testKey))
+
+	valueInput := page.Locator(`#modal-content textarea[name="value"]`)
+	require.NoError(t, valueInput.Fill("test value for audit"))
+
+	// submit the form
+	submitBtn := page.Locator(`#modal-content button[type="submit"]`)
+	require.NoError(t, submitBtn.Click())
+
+	// wait for modal to close and keys list to refresh
+	waitHidden(t, page.Locator("#main-modal.active"))
+
+	// navigate to audit page
+	auditLink := page.Locator(`a[href="/audit"]`)
+	waitVisible(t, auditLink)
+	require.NoError(t, auditLink.Click())
+	require.NoError(t, page.WaitForURL(baseURL+"/audit"))
+
+	// wait for audit table to load
+	waitVisible(t, page.Locator(`.audit-header h1:has-text("Audit Log")`))
+
+	// verify the create action appears in the audit log
+	auditTable := page.Locator(".audit-table")
+	waitVisible(t, auditTable)
+
+	// find the row with our key
+	keyCell := page.Locator(`.audit-table .col-key:has-text("` + testKey + `")`)
+	waitVisible(t, keyCell)
+
+	// verify the action is CREATE
+	row := keyCell.Locator("xpath=..")
+	actionBadge := row.Locator(".col-action .badge")
+	actionText, err := actionBadge.TextContent()
+	require.NoError(t, err)
+	assert.Equal(t, "CREATE", actionText)
+
+	// verify the actor is admin
+	actorCell := row.Locator(".col-actor")
+	actorText, err := actorCell.TextContent()
+	require.NoError(t, err)
+	assert.Equal(t, "admin", actorText)
+
+	// verify the result is success
+	resultBadge := row.Locator(".col-result .badge")
+	resultText, err := resultBadge.TextContent()
+	require.NoError(t, err)
+	assert.Equal(t, "success", resultText)
+}
+
+func TestAudit_FilterFormWorks(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "admin", "testpass")
+
+	// navigate to audit page
+	_, err := page.Goto(baseURL + "/audit")
+	require.NoError(t, err)
+
+	// wait for filter panel
+	filterPanel := page.Locator(".filter-panel")
+	waitVisible(t, filterPanel)
+
+	// verify filter form fields exist
+	keyInput := page.Locator(`input[name="key"]`)
+	waitVisible(t, keyInput)
+
+	actorInput := page.Locator(`input[name="actor"]`)
+	waitVisible(t, actorInput)
+
+	actionSelect := page.Locator(`select[name="action"]`)
+	waitVisible(t, actionSelect)
+
+	resultSelect := page.Locator(`select[name="result"]`)
+	waitVisible(t, resultSelect)
+
+	// fill in a filter value
+	require.NoError(t, keyInput.Fill("test/*"))
+
+	// click apply button and verify no errors
+	applyBtn := page.Locator(`.filter-actions button[type="submit"]`)
+	require.NoError(t, applyBtn.Click())
+
+	// wait for table container refresh (will show empty state or table)
+	waitVisible(t, page.Locator(".table-container"))
+}
+
+func TestAudit_BackToMain(t *testing.T) {
+	page := newPage(t)
+	login(t, page, "admin", "testpass")
+
+	// navigate to audit page
+	_, err := page.Goto(baseURL + "/audit")
+	require.NoError(t, err)
+	waitVisible(t, page.Locator(`.audit-header h1:has-text("Audit Log")`))
+
+	// click back link
+	backLink := page.Locator(`a[href="/"]`)
+	require.NoError(t, backLink.Click())
+
+	// should be back on main page
+	require.NoError(t, page.WaitForURL(baseURL+"/"))
+	waitVisible(t, page.Locator(`h1:has-text("Stash")`))
+}
