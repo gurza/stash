@@ -48,12 +48,12 @@
 <span id="pagination" hx-swap-oob="outerHTML" class="pagination">
     {{if gt .TotalPages 1}}
     <button class="btn-page{{if not .HasPrev}} disabled{{end}}"
-            {{if .HasPrev}}hx-get="{{.BaseURL}}/web/audit?page={{sub .Page 1}}&key={{.Key}}&actor={{.Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
+            {{if .HasPrev}}hx-get="{{.BaseURL}}/web/audit?page={{sub .Page 1}}&key={{urlEncode .Key}}&actor={{urlEncode .Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
             hx-target="#audit-table"
             hx-swap="innerHTML"{{end}}>&#8249;</button>
     <span class="page-info">{{.Page}} / {{.TotalPages}}</span>
     <button class="btn-page{{if not .HasNext}} disabled{{end}}"
-            {{if .HasNext}}hx-get="{{.BaseURL}}/web/audit?page={{add .Page 1}}&key={{.Key}}&actor={{.Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
+            {{if .HasNext}}hx-get="{{.BaseURL}}/web/audit?page={{add .Page 1}}&key={{urlEncode .Key}}&actor={{urlEncode .Actor}}&action={{.Action}}&result={{.Result}}&actor_type={{.ActorType}}&from={{.From}}&to={{.To}}"
             hx-target="#audit-table"
             hx-swap="innerHTML"{{end}}>&#8250;</button>
     {{end}}
