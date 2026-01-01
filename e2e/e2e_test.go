@@ -279,7 +279,13 @@ func viewKey(t *testing.T, page playwright.Page, key string) playwright.Locator 
 	t.Helper()
 	keyCell := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, key))
 	waitVisible(t, keyCell) // ensure element ready after HTMX swap
-	require.NoError(t, keyCell.Click())
+
+	// click and wait for HTMX response to complete
+	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys/view/`), func() error {
+		return keyCell.Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
+
 	modal := page.Locator("#main-modal.active")
 	waitVisible(t, modal)
 	return modal
@@ -297,7 +303,13 @@ func viewKeyByText(t *testing.T, page playwright.Page, key string) playwright.Lo
 	// click the key cell within the row - use First() to be explicit
 	keyCell := row.Locator("td.key-cell").First()
 	waitVisible(t, keyCell) // ensure cell is ready before click
-	require.NoError(t, keyCell.Click())
+
+	// click and wait for HTMX response to complete
+	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys/view/`), func() error {
+		return keyCell.Click()
+	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
+	require.NoError(t, err)
+
 	modal := page.Locator("#main-modal.active")
 	waitVisible(t, modal)
 	return modal
