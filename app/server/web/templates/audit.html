@@ -91,11 +91,11 @@
                 <div class="filter-row">
                     <div class="filter-group">
                         <label for="from">From</label>
-                        <input type="datetime-local" id="from" name="from" value="{{.From}}">
+                        <input type="text" id="from" name="from" value="{{.From}}" placeholder="2024-01-15T14:30" autocomplete="off" pattern="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}" title="Format: YYYY-MM-DDTHH:MM">
                     </div>
                     <div class="filter-group">
                         <label for="to">To</label>
-                        <input type="datetime-local" id="to" name="to" value="{{.To}}">
+                        <input type="text" id="to" name="to" value="{{.To}}" placeholder="2024-01-15T14:30" autocomplete="off" pattern="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}" title="Format: YYYY-MM-DDTHH:MM">
                     </div>
                     <div class="filter-actions">
                         <button type="submit" class="btn btn-primary">Apply</button>
