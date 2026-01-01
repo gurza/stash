@@ -129,6 +129,9 @@ stash restore --rev=abc1234 --db=/path/to/stash.db --git.path=/data/.history
 | `--git.push` | `STASH_GIT_PUSH` | `false` | Auto-push after commits |
 | `--git.ssh-key` | `STASH_GIT_SSH_KEY` | - | SSH private key path for git push |
 | `--secrets.key` | `STASH_SECRETS_KEY` | - | Master key for secrets encryption (min 16 chars) |
+| `--audit.enabled` | `STASH_AUDIT_ENABLED` | `false` | Enable audit logging |
+| `--audit.retention` | `STASH_AUDIT_RETENTION` | `2160h` | Audit log retention period (default 90 days) |
+| `--audit.query-limit` | `STASH_AUDIT_QUERY_LIMIT` | `10000` | Max entries per audit query |
 | `--dbg` | `DEBUG` | `false` | Debug mode |
 
 ### Restore Options
@@ -251,7 +254,7 @@ htpasswd -nbBC 10 "" "your-password" | tr -d ':\n' | sed 's/$2y/$2a/'
 | Method | Usage | Scope |
 |--------|-------|-------|
 | Web UI | Username + password login | Prefix-scoped per user |
-| API | Bearer token | Prefix-scoped per token |
+| API | Bearer token or X-Auth-Token header | Prefix-scoped per token |
 
 ### Users (Web UI)
 
@@ -266,10 +269,15 @@ uuidgen  # macOS/Linux
 openssl rand -hex 16  # alternative
 ```
 
-Use tokens via Bearer authentication:
+Use tokens via Bearer authentication or X-Auth-Token header:
 
 ```bash
+# using Authorization header
 curl -H "Authorization: Bearer a4f8d9e2-7c3b-4a1f-9e2d-8c7b6a5f4e3d" \
+     http://localhost:8080/kv/app1/config
+
+# using X-Auth-Token header
+curl -H "X-Auth-Token: a4f8d9e2-7c3b-4a1f-9e2d-8c7b6a5f4e3d" \
      http://localhost:8080/kv/app1/config
 ```
 
@@ -553,6 +561,83 @@ Use Zero-Knowledge when the server should never have access to plaintext (e.g., 
 - Clients storing well-formed but cryptographically invalid `$ZK$` payloads (server validates format, not decryptability)
 
 If your threat model requires protection against an actively malicious server, consider additional integrity checks at the application layer.
+
+## Audit Trail
+
+Optional audit logging tracks all key-value operations with timestamps, actors, and results. Useful for compliance, debugging, and security monitoring.
+
+### Enabling Audit Logging
+
+```bash
+stash server --audit.enabled
+```
+
+### What Gets Logged
+
+| Action | Trigger |
+|--------|---------|
+| create | New key created (POST) |
+| read | Key value retrieved (GET) |
+| update | Key value modified (PUT) |
+| delete | Key removed (DELETE) |
+
+Each entry includes:
+- Timestamp
+- Action (create/read/update/delete)
+- Key path
+- Actor (username, token prefix, or "public")
+- Actor type (user/token/public)
+- Client IP address
+- Result (success/denied/not_found)
+- Value size (for successful operations)
+
+### Web UI (Admin Only)
+
+Admins can view the audit log at `/audit` with filters for:
+- Key prefix
+- Actor
+- Action type
+- Result
+- Actor type
+- Date range
+
+The audit page uses the same page size as the main key list (`--server.page-size`).
+
+### Audit API (Admin Only)
+
+Query the audit log programmatically:
+
+```bash
+curl -X POST -H "Authorization: Bearer <admin-token>" \
+     -d '{"key": "app/*", "action": "delete", "limit": 100}' \
+     http://localhost:8080/audit/query
+```
+
+Query parameters:
+- `key` - Key prefix filter (use `*` suffix for prefix matching)
+- `actor` - Actor name filter
+- `actor_type` - Filter by actor type: user, token, public
+- `action` - Filter by action: read, create, update, delete
+- `result` - Filter by result: success, denied, not_found
+- `from` - Start timestamp (RFC3339)
+- `to` - End timestamp (RFC3339)
+- `limit` - Max entries to return (default: query-limit setting)
+
+Admin access is determined by the `admin: true` flag in the auth config:
+
+```yaml
+users:
+  - name: admin
+    password: "$2a$10$..."
+    admin: true  # grants access to audit log
+    permissions:
+      - prefix: "*"
+        access: rw
+```
+
+### Retention
+
+Old audit entries are automatically deleted after the retention period (default 90 days). Cleanup runs at startup and every hour.
 
 ### Combining ZK with Secrets Paths
 

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/umputun/stash/app/enum"
-	"github.com/umputun/stash/app/server/internal/cookie"
 	"github.com/umputun/stash/app/store"
 )
 
@@ -43,12 +42,16 @@ func (tm *templateManager) execute(w http.ResponseWriter, name string, data any)
 
 // NewAuditHandler creates a new audit handler.
 func NewAuditHandler(auditStore AuditStore, auth AuthProvider, h *Handler) *AuditHandler {
+	pageSize := h.pageSize
+	if pageSize == 0 {
+		pageSize = 100 // default if disabled in main handler
+	}
 	return &AuditHandler{
 		store:    auditStore,
 		auth:     auth,
 		tmpl:     &templateManager{handler: h},
 		baseURL:  h.baseURL,
-		pageSize: 100,
+		pageSize: pageSize,
 	}
 }
 
@@ -82,7 +85,7 @@ type auditTemplateData struct {
 
 // HandleAuditPage handles GET /audit - renders full audit page.
 func (h *AuditHandler) HandleAuditPage(w http.ResponseWriter, r *http.Request) {
-	username := h.getCurrentUser(r)
+	username := h.tmpl.handler.getCurrentUser(r)
 	if username == "" {
 		http.Redirect(w, r, h.baseURL+"/login?return="+h.baseURL+"/audit", http.StatusFound)
 		return
@@ -105,7 +108,7 @@ func (h *AuditHandler) HandleAuditPage(w http.ResponseWriter, r *http.Request) {
 
 // HandleAuditTable handles GET /web/audit - returns audit table partial for HTMX.
 func (h *AuditHandler) HandleAuditTable(w http.ResponseWriter, r *http.Request) {
-	username := h.getCurrentUser(r)
+	username := h.tmpl.handler.getCurrentUser(r)
 	if username == "" || !h.auth.IsAdmin(username) {
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -176,7 +179,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 	if err != nil {
 		return auditTemplateData{
 			Error:       "Failed to query audit log",
-			Theme:       h.getTheme(r),
+			Theme:       h.tmpl.handler.getTheme(r),
 			AuthEnabled: h.auth.Enabled(),
 			BaseURL:     h.baseURL,
 		}
@@ -196,7 +199,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		if err != nil {
 			return auditTemplateData{
 				Error:       "Failed to query audit log",
-				Theme:       h.getTheme(r),
+				Theme:       h.tmpl.handler.getTheme(r),
 				AuthEnabled: h.auth.Enabled(),
 				BaseURL:     h.baseURL,
 			}
@@ -222,60 +225,9 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		TotalPages:  totalPages,
 		HasPrev:     page > 1,
 		HasNext:     page < totalPages,
-		Theme:       h.getTheme(r),
+		Theme:       h.tmpl.handler.getTheme(r),
 		AuthEnabled: h.auth.Enabled(),
 		BaseURL:     h.baseURL,
-	}
-}
-
-// getCurrentUser returns the username from the session cookie.
-func (h *AuditHandler) getCurrentUser(r *http.Request) string {
-	for _, cookieName := range cookie.SessionCookieNames {
-		if c, err := r.Cookie(cookieName); err == nil {
-			if username, ok := h.auth.GetSessionUser(r.Context(), c.Value); ok {
-				return username
-			}
-		}
-	}
-	return ""
-}
-
-// getTheme returns the current theme from cookie.
-func (h *AuditHandler) getTheme(r *http.Request) enum.Theme {
-	if c, err := r.Cookie("theme"); err == nil {
-		if theme, err := enum.ParseTheme(c.Value); err == nil {
-			return theme
-		}
-	}
-	return enum.ThemeSystem
-}
-
-// relativeTime returns a human-readable relative time string.
-func relativeTime(t time.Time) string {
-	diff := time.Since(t)
-	switch {
-	case diff < time.Minute:
-		return "just now"
-	case diff < time.Hour:
-		mins := int(diff.Minutes())
-		if mins == 1 {
-			return "1m ago"
-		}
-		return strconv.Itoa(mins) + "m ago"
-	case diff < 24*time.Hour:
-		hours := int(diff.Hours())
-		if hours == 1 {
-			return "1h ago"
-		}
-		return strconv.Itoa(hours) + "h ago"
-	case diff < 7*24*time.Hour:
-		days := int(diff.Hours() / 24)
-		if days == 1 {
-			return "1d ago"
-		}
-		return strconv.Itoa(days) + "d ago"
-	default:
-		return t.Format("Jan 2")
 	}
 }
 
@@ -312,9 +264,8 @@ func resultClass(result enum.AuditResult) string {
 // AuditTemplateFuncs returns template functions for audit templates.
 func AuditTemplateFuncs() map[string]any {
 	return map[string]any{
-		"relativeTime": relativeTime,
-		"actionClass":  actionClass,
-		"resultClass":  resultClass,
-		"upper":        strings.ToUpper,
+		"actionClass": actionClass,
+		"resultClass": resultClass,
+		"upper":       strings.ToUpper,
 	}
 }

@@ -9,11 +9,13 @@ Simple key-value configuration service - a minimal alternative to Consul KV or e
 - **app/server/** - HTTP server with routegroup
   - `server.go` - Server struct, config, routes, graceful shutdown, GitStore interface
   - `handlers.go` - HTTP handlers for KV API operations (with git integration)
+  - `audit.go` - Audit API handler (admin query endpoint)
   - `web.go` - Web UI handlers, templates, static file serving, per-user permission checks
+  - `web/audit.go` - Audit web UI handler (full page and HTMX partials)
   - `auth.go` - Authentication: YAML config (users + tokens), sessions, middleware, prefix-based ACL
   - `verify.go` - JSON schema validation for auth config (embedded schema)
   - `static/` - Embedded CSS, JS, HTMX library
-  - `templates/` - Embedded HTML templates (base, index, login, partials)
+  - `templates/` - Embedded HTML templates (base, index, login, audit, partials)
   - `mocks/` - Generated mocks (moq)
 - **app/store/** - Database storage layer (SQLite/PostgreSQL)
   - `store.go` - Interface, types (KeyInfo with Secret/ZKEncrypted fields), errors
@@ -144,6 +146,15 @@ POST   /web/view-mode                 # toggle view mode (grid/cards)
 POST   /web/sort                      # cycle sort order
 POST   /web/secrets-filter            # cycle secrets filter (all/secrets/keys)
 ```
+
+## Audit UI Routes (admin only, requires --audit.enabled)
+
+```
+GET    /audit                         # full audit log page with filters
+GET    /web/audit                     # HTMX partial: audit table
+```
+
+Audit web handler in `app/server/web/audit.go`. Uses same page size as key list (`--server.page-size`).
 
 ## Web UI Structure
 

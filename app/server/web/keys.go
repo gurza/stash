@@ -131,6 +131,8 @@ func (h *Handler) handleKeyView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[DEBUG] view %s (%d bytes, format=%s)", key, len(value), format)
+	valueSize := len(value)
+	h.logAudit(r, key, enum.AuditActionRead, enum.AuditResultSuccess, &valueSize)
 
 	displayValue, isBinary := h.valueForDisplay(value)
 	modalWidth, textareaHeight := h.calculateModalDimensions(displayValue)
