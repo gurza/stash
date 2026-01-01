@@ -36,6 +36,7 @@ type AuditQuery struct {
 	From      time.Time        // inclusive
 	To        time.Time        // inclusive
 	Limit     int              // max entries to return
+	Offset    int              // skip entries for pagination
 }
 
 // LogAudit inserts an audit entry into the audit_log table.
@@ -128,14 +129,14 @@ func (s *Store) QueryAudit(ctx context.Context, q AuditQuery) ([]AuditEntry, int
 		return nil, 0, fmt.Errorf("failed to count audit entries: %w", err)
 	}
 
-	// get entries with limit
+	// get entries with limit and offset
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 10000 // default limit
 	}
 
-	selectQuery := s.adoptQuery("SELECT id, timestamp, action, key, actor, actor_type, result, ip, user_agent, value_size, request_id FROM audit_log" + whereClause + " ORDER BY timestamp DESC LIMIT ?")
-	args = append(args, limit)
+	selectQuery := s.adoptQuery("SELECT id, timestamp, action, key, actor, actor_type, result, ip, user_agent, value_size, request_id FROM audit_log" + whereClause + " ORDER BY timestamp DESC LIMIT ? OFFSET ?")
+	args = append(args, limit, q.Offset)
 
 	rows, err := s.db.QueryxContext(ctx, selectQuery, args...)
 	if err != nil {

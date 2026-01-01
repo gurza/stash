@@ -136,9 +136,10 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 
 	// build query
 	query := store.AuditQuery{
-		Key:   key,
-		Actor: actor,
-		Limit: h.pageSize,
+		Key:    key,
+		Actor:  actor,
+		Limit:  h.pageSize,
+		Offset: (page - 1) * h.pageSize,
 	}
 
 	// parse enums

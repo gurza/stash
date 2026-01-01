@@ -223,6 +223,12 @@ func TestAudit_Pagination(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, pageText, "1 /")
 
+	// capture first key on page 1 to verify page 2 shows different content
+	firstRowPage1 := page.Locator(".audit-table tbody tr").First().Locator(".col-key")
+	page1FirstKey, err := firstRowPage1.TextContent()
+	require.NoError(t, err)
+	require.NotEmpty(t, page1FirstKey, "page 1 should have entries")
+
 	// click next page button and wait for HTMX response
 	nextBtn := page.Locator(".stats #pagination .btn-page:not(.disabled)").Last()
 	waitVisible(t, nextBtn)
@@ -238,6 +244,13 @@ func TestAudit_Pagination(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, pageText, "2 /")
 
+	// verify page 2 shows different entries than page 1
+	firstRowPage2 := page.Locator(".audit-table tbody tr").First().Locator(".col-key")
+	page2FirstKey, err := firstRowPage2.TextContent()
+	require.NoError(t, err)
+	require.NotEmpty(t, page2FirstKey, "page 2 should have entries")
+	assert.NotEqual(t, page1FirstKey, page2FirstKey, "page 2 should show different entries than page 1")
+
 	// click previous page button and wait for HTMX response
 	prevBtn := page.Locator(".stats #pagination .btn-page:not(.disabled)").First()
 	htmxResp, err = page.ExpectResponse(regexp.MustCompile(`/web/audit`), func() error {
@@ -246,9 +259,15 @@ func TestAudit_Pagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 200, htmxResp.Status())
 
-	// verify we're back on page 1
+	// verify we're back on page 1 with original content
 	waitVisible(t, auditTable)
 	pageText, err = pageInfo.TextContent()
 	require.NoError(t, err)
 	assert.Contains(t, pageText, "1 /")
+
+	// verify page 1 shows same first entry as before
+	firstRowBack := page.Locator(".audit-table tbody tr").First().Locator(".col-key")
+	page1KeyBack, err := firstRowBack.TextContent()
+	require.NoError(t, err)
+	assert.Equal(t, page1FirstKey, page1KeyBack, "returning to page 1 should show same entries")
 }

@@ -93,6 +93,48 @@ func TestStore_AuditLog(t *testing.T) {
 		assert.Len(t, results, 2)
 	})
 
+	t.Run("offset pagination", func(t *testing.T) {
+		st, err := New(":memory:")
+		require.NoError(t, err)
+		defer st.Close()
+
+		now := time.Now()
+		// create 5 entries with distinct keys
+		for i := range 5 {
+			require.NoError(t, st.LogAudit(ctx, AuditEntry{
+				Timestamp: now.Add(time.Duration(i) * time.Minute),
+				Action:    enum.AuditActionRead,
+				Key:       string(rune('a' + i)), // a, b, c, d, e
+				Actor:     "user",
+				ActorType: enum.ActorTypeUser,
+				Result:    enum.AuditResultSuccess,
+			}))
+		}
+
+		// page 1: limit 2, offset 0 - should get newest 2 (e, d)
+		results, total, err := st.QueryAudit(ctx, AuditQuery{Limit: 2, Offset: 0})
+		require.NoError(t, err)
+		assert.Equal(t, 5, total)
+		assert.Len(t, results, 2)
+		assert.Equal(t, "e", results[0].Key)
+		assert.Equal(t, "d", results[1].Key)
+
+		// page 2: limit 2, offset 2 - should get (c, b)
+		results, total, err = st.QueryAudit(ctx, AuditQuery{Limit: 2, Offset: 2})
+		require.NoError(t, err)
+		assert.Equal(t, 5, total)
+		assert.Len(t, results, 2)
+		assert.Equal(t, "c", results[0].Key)
+		assert.Equal(t, "b", results[1].Key)
+
+		// page 3: limit 2, offset 4 - should get (a)
+		results, total, err = st.QueryAudit(ctx, AuditQuery{Limit: 2, Offset: 4})
+		require.NoError(t, err)
+		assert.Equal(t, 5, total)
+		assert.Len(t, results, 1)
+		assert.Equal(t, "a", results[0].Key)
+	})
+
 	t.Run("time range filter", func(t *testing.T) {
 		st, err := New(":memory:")
 		require.NoError(t, err)
