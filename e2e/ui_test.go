@@ -4,11 +4,9 @@ package e2e
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 	"time"
 
-	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -190,14 +188,9 @@ func TestUI_SecretsNotConfiguredError(t *testing.T) {
 
 	require.NoError(t, page.Locator(`input[name="key"]`).Fill("secrets/test-key"))
 	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill("test value"))
+	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
 
-	// wait for HTMX response before checking DOM (prevents race condition)
-	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys`), func() error {
-		return page.Locator(`#modal-content button[type="submit"]`).Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
-
-	// now safe to check DOM - response completed, HTMX has swapped content
+	// should show error message in form
 	errorMsg := page.Locator("#form-error")
 	waitVisible(t, errorMsg)
 

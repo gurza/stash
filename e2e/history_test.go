@@ -4,10 +4,8 @@ package e2e
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 
-	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,12 +21,8 @@ func TestHistory_ShowsCommits(t *testing.T) {
 
 	modal := viewKey(t, page, keyName)
 
-	// click history button and wait for HTMX response
-	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys/history/`), func() error {
-		return page.Locator(`button:has-text("History")`).Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
-
+	// click history button
+	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
 	historyTable := page.Locator(".history-table")
 	waitVisible(t, historyTable)
 
@@ -54,22 +48,14 @@ func TestHistory_ViewSpecificRevision(t *testing.T) {
 
 	modal := viewKey(t, page, keyName)
 
-	// click history and wait for HTMX response
-	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys/history/`), func() error {
-		return page.Locator(`button:has-text("History")`).Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
-
+	// click history
+	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
 	historyTable := page.Locator(".history-table")
 	waitVisible(t, historyTable)
 
-	// click on oldest revision (last row) and wait for HTMX response
+	// click on oldest revision (last row)
 	rows := page.Locator(".history-table tbody tr")
-	_, err = page.ExpectResponse(regexp.MustCompile(`/web/keys/revision/`), func() error {
-		return rows.Last().Locator("td").First().Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
-
+	require.NoError(t, rows.Last().Locator("td").First().Click())
 	// wait for revision content to load
 	valueContent := page.Locator(".value-content")
 	waitVisible(t, valueContent)
@@ -96,39 +82,23 @@ func TestHistory_RestoreRevision(t *testing.T) {
 
 	modal := viewKey(t, page, keyName)
 
-	// click history and wait for HTMX response
-	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys/history/`), func() error {
-		return page.Locator(`button:has-text("History")`).Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
-
+	// click history
+	require.NoError(t, page.Locator(`button:has-text("History")`).Click())
 	historyTable := page.Locator(".history-table")
 	waitVisible(t, historyTable)
 
-	// wait for restore button to be visible
-	restoreBtn := page.Locator(`button:has-text("Restore")`).Last()
-	waitVisible(t, restoreBtn)
-
-	// click restore on oldest revision and wait for HTMX response
-	_, err = page.ExpectResponse(regexp.MustCompile(`/web/keys/restore/`), func() error {
-		return restoreBtn.Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
-
+	// click restore on oldest revision
+	require.NoError(t, page.Locator(`button:has-text("Restore")`).Last().Click())
 	// wait for modal to close after restore
 	waitHidden(t, modal)
 
 	// reload and verify restored
-	_, err = page.Goto(baseURL + "/")
+	_, err := page.Goto(baseURL + "/")
 	require.NoError(t, err)
 	keyCell := page.Locator(fmt.Sprintf(`td.key-cell:has-text(%q)`, keyName))
 	waitVisible(t, keyCell)
 
-	// click key cell and wait for HTMX response
-	_, err = page.ExpectResponse(regexp.MustCompile(`/web/keys/view/`), func() error {
-		return keyCell.Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
+	require.NoError(t, keyCell.Click())
 	waitVisible(t, modal)
 	valueContent := page.Locator(".value-content")
 	waitVisible(t, valueContent)

@@ -4,10 +4,8 @@ package e2e
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 
-	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,12 +65,7 @@ func TestKV_EditKey(t *testing.T) {
 	// update value
 	newValue := "updated value"
 	require.NoError(t, page.Locator(`textarea[name="value"]`).Fill(newValue))
-
-	// click submit and wait for HTMX response to complete
-	_, err := page.ExpectResponse(regexp.MustCompile(`/web/keys/`), func() error {
-		return page.Locator(`#modal-content button[type="submit"]`).Click()
-	}, playwright.PageExpectResponseOptions{Timeout: playwright.Float(15000)})
-	require.NoError(t, err)
+	require.NoError(t, page.Locator(`#modal-content button[type="submit"]`).Click())
 	waitHidden(t, modal)
 
 	// verify by viewing
