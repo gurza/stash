@@ -2,8 +2,8 @@ package web
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -23,33 +23,21 @@ type AuditStore interface {
 type AuditHandler struct {
 	store    AuditStore
 	auth     AuthProvider
-	tmpl     *templateManager
+	parent   *Handler
 	baseURL  string
 	pageSize int
-}
-
-// templateManager wraps template execution for audit handler.
-type templateManager struct {
-	handler *Handler
-}
-
-func (tm *templateManager) execute(w http.ResponseWriter, name string, data any) error {
-	if err := tm.handler.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		return fmt.Errorf("execute template %s: %w", name, err)
-	}
-	return nil
 }
 
 // NewAuditHandler creates a new audit handler.
 func NewAuditHandler(auditStore AuditStore, auth AuthProvider, h *Handler) *AuditHandler {
 	pageSize := h.pageSize
 	if pageSize == 0 {
-		pageSize = 100 // default if disabled in main handler
+		pageSize = 100 // audit log always paginates (unlike keys which can disable with 0)
 	}
 	return &AuditHandler{
 		store:    auditStore,
 		auth:     auth,
-		tmpl:     &templateManager{handler: h},
+		parent:   h,
 		baseURL:  h.baseURL,
 		pageSize: pageSize,
 	}
@@ -60,7 +48,6 @@ type auditTemplateData struct {
 	Entries []store.AuditEntry
 	Total   int
 	Page    int
-	Limit   int
 
 	// filter values for form state
 	Key       string
@@ -85,15 +72,15 @@ type auditTemplateData struct {
 
 // HandleAuditPage handles GET /audit - renders full audit page.
 func (h *AuditHandler) HandleAuditPage(w http.ResponseWriter, r *http.Request) {
-	username := h.tmpl.handler.getCurrentUser(r)
+	username := h.parent.getCurrentUser(r)
 	if username == "" {
-		http.Redirect(w, r, h.baseURL+"/login?return="+h.baseURL+"/audit", http.StatusFound)
+		http.Redirect(w, r, h.baseURL+"/login?return="+url.QueryEscape(h.baseURL+"/audit"), http.StatusFound)
 		return
 	}
 
 	if !h.auth.IsAdmin(username) {
 		w.WriteHeader(http.StatusForbidden)
-		_ = h.tmpl.execute(w, "error", map[string]any{
+		_ = h.parent.tmpl.ExecuteTemplate(w, "error", map[string]any{
 			"Error":   "Admin access required",
 			"BaseURL": h.baseURL,
 		})
@@ -101,21 +88,21 @@ func (h *AuditHandler) HandleAuditPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := h.buildAuditData(r)
-	if err := h.tmpl.execute(w, "audit.html", data); err != nil {
+	if err := h.parent.tmpl.ExecuteTemplate(w, "audit.html", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
 }
 
 // HandleAuditTable handles GET /web/audit - returns audit table partial for HTMX.
 func (h *AuditHandler) HandleAuditTable(w http.ResponseWriter, r *http.Request) {
-	username := h.tmpl.handler.getCurrentUser(r)
+	username := h.parent.getCurrentUser(r)
 	if username == "" || !h.auth.IsAdmin(username) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	data := h.buildAuditData(r)
-	if err := h.tmpl.execute(w, "audit-table", data); err != nil {
+	if err := h.parent.tmpl.ExecuteTemplate(w, "audit-table", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
 }
@@ -152,8 +139,8 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		}
 	}
 	if result != "" && result != "all" {
-		if r, err := enum.ParseAuditResult(result); err == nil {
-			query.Result = r
+		if res, err := enum.ParseAuditResult(result); err == nil {
+			query.Result = res
 		}
 	}
 	if actorType != "" && actorType != "all" {
@@ -179,7 +166,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 	if err != nil {
 		return auditTemplateData{
 			Error:       "Failed to query audit log",
-			Theme:       h.tmpl.handler.getTheme(r),
+			Theme:       h.parent.getTheme(r),
 			AuthEnabled: h.auth.Enabled(),
 			BaseURL:     h.baseURL,
 		}
@@ -199,7 +186,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		if err != nil {
 			return auditTemplateData{
 				Error:       "Failed to query audit log",
-				Theme:       h.tmpl.handler.getTheme(r),
+				Theme:       h.parent.getTheme(r),
 				AuthEnabled: h.auth.Enabled(),
 				BaseURL:     h.baseURL,
 			}
@@ -214,7 +201,6 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		Entries:     entries,
 		Total:       total,
 		Page:        page,
-		Limit:       h.pageSize,
 		Key:         key,
 		Actor:       actor,
 		Action:      action,
@@ -225,7 +211,7 @@ func (h *AuditHandler) buildAuditData(r *http.Request) auditTemplateData {
 		TotalPages:  totalPages,
 		HasPrev:     page > 1,
 		HasNext:     page < totalPages,
-		Theme:       h.tmpl.handler.getTheme(r),
+		Theme:       h.parent.getTheme(r),
 		AuthEnabled: h.auth.Enabled(),
 		BaseURL:     h.baseURL,
 	}

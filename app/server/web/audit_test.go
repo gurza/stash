@@ -86,8 +86,9 @@ func TestAuditHandler_HandleAuditTable(t *testing.T) {
 
 	t.Run("returns table partial for admin", func(t *testing.T) {
 		now := time.Now()
+		valueSize := 1024
 		entries := []store.AuditEntry{
-			{ID: 1, Timestamp: now, Action: enum.AuditActionRead, Key: "test/key", Actor: "admin", ActorType: enum.ActorTypeUser, Result: enum.AuditResultSuccess},
+			{ID: 1, Timestamp: now, Action: enum.AuditActionRead, Key: "test/key", Actor: "admin", ActorType: enum.ActorTypeUser, Result: enum.AuditResultSuccess, ValueSize: &valueSize},
 		}
 		auditStore := &mocks.AuditStoreMock{
 			QueryAuditFunc: func(_ context.Context, _ store.AuditQuery) ([]store.AuditEntry, int, error) {
@@ -108,6 +109,7 @@ func TestAuditHandler_HandleAuditTable(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Contains(t, rec.Body.String(), "test/key")
+		assert.Contains(t, rec.Body.String(), "1.0 KB") // formatted ValueSize
 	})
 }
 
@@ -138,6 +140,30 @@ func TestAuditHandler_BuildAuditData(t *testing.T) {
 		assert.Equal(t, enum.AuditResultSuccess, capturedQuery.Result)
 		assert.Equal(t, 0, capturedQuery.Offset) // page 1 (default)
 		assert.Equal(t, 100, capturedQuery.Limit)
+	})
+
+	t.Run("parses actor_type filter", func(t *testing.T) {
+		var capturedQuery store.AuditQuery
+		auditStore := &mocks.AuditStoreMock{
+			QueryAuditFunc: func(_ context.Context, q store.AuditQuery) ([]store.AuditEntry, int, error) {
+				capturedQuery = q
+				return []store.AuditEntry{}, 0, nil
+			},
+		}
+		auth := &mocks.AuthProviderMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "admin", true },
+			IsAdminFunc:        func(username string) bool { return true },
+			EnabledFunc:        func() bool { return true },
+		}
+		h := newTestAuditHandler(t, auditStore, auth)
+
+		req := httptest.NewRequest(http.MethodGet, "/web/audit?actor_type=token", http.NoBody)
+		req.AddCookie(&http.Cookie{Name: "stash-auth", Value: "token"})
+		rec := httptest.NewRecorder()
+		h.HandleAuditTable(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, enum.ActorTypeToken, capturedQuery.ActorType)
 	})
 
 	t.Run("clamps page when exceeds total", func(t *testing.T) {

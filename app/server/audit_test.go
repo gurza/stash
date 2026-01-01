@@ -448,6 +448,44 @@ func TestAuditor_ExtractActor(t *testing.T) {
 		assert.Equal(t, enum.ActorTypeToken, actorType)
 	})
 
+	t.Run("X-Auth-Token header", func(t *testing.T) {
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
+			HasTokenACLFunc:    func(token string) bool { return token == "xauthtoken12345" },
+			IsAdminFunc:        func(_ string) bool { return false },
+		}
+		aud := newAuditor(nil, auth)
+		req := httptest.NewRequest(http.MethodGet, "/kv/test", http.NoBody)
+		req.Header.Set("X-Auth-Token", "xauthtoken12345")
+
+		actor, actorType := aud.extractActor(req)
+
+		assert.Equal(t, "token:xaut****", actor)
+		assert.Equal(t, enum.ActorTypeToken, actorType)
+	})
+
+	t.Run("X-Auth-Token takes precedence over Bearer", func(t *testing.T) {
+		xauthValue := "xauthvalue12345"
+		bearerValue := "bearervalue6789"
+		auth := &mocks.AuditAuthMock{
+			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },
+			HasTokenACLFunc: func(tkn string) bool {
+				return tkn == xauthValue || tkn == bearerValue
+			},
+			IsAdminFunc: func(_ string) bool { return false },
+		}
+		aud := newAuditor(nil, auth)
+		req := httptest.NewRequest(http.MethodGet, "/kv/test", http.NoBody)
+		req.Header.Set("X-Auth-Token", xauthValue)
+		req.Header.Set("Authorization", "Bearer "+bearerValue)
+
+		actor, actorType := aud.extractActor(req)
+
+		// should use X-Auth-Token, not Bearer
+		assert.Equal(t, "token:xaut****", actor)
+		assert.Equal(t, enum.ActorTypeToken, actorType)
+	})
+
 	t.Run("short token masked with stars", func(t *testing.T) {
 		auth := &mocks.AuditAuthMock{
 			GetSessionUserFunc: func(_ context.Context, _ string) (string, bool) { return "", false },

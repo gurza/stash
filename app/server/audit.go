@@ -161,7 +161,7 @@ func (a *auditor) buildEntry(r *http.Request, rc *responseCapture, key string) s
 }
 
 // extractActor extracts actor identity from request.
-// returns (actor name, actor type) - checks session cookie first, then Bearer token.
+// returns (actor name, actor type) - checks session cookie first, then X-Auth-Token header, then Bearer token.
 func (a *auditor) extractActor(r *http.Request) (string, enum.ActorType) {
 	if a.auth == nil {
 		return "anonymous", enum.ActorTypePublic
@@ -178,22 +178,33 @@ func (a *auditor) extractActor(r *http.Request) (string, enum.ActorType) {
 		}
 	}
 
+	// check X-Auth-Token header first (preferred for API)
+	if token := r.Header.Get("X-Auth-Token"); token != "" {
+		if a.auth.HasTokenACL(token) {
+			return a.maskToken(token), enum.ActorTypeToken
+		}
+	}
+
 	// check API token from Authorization header
 	authHeader := r.Header.Get("Authorization")
 	if token, found := strings.CutPrefix(authHeader, "Bearer "); found {
 		if a.auth.HasTokenACL(token) {
-			// mask token for audit log (show first 4 chars, matching auth.go)
-			masked := token
-			if len(masked) > 4 {
-				masked = masked[:4] + "****"
-			} else {
-				masked = "****"
-			}
-			return "token:" + masked, enum.ActorTypeToken
+			return a.maskToken(token), enum.ActorTypeToken
 		}
 	}
 
 	return "anonymous", enum.ActorTypePublic
+}
+
+// maskToken masks a token for audit log display (shows first 4 chars).
+func (a *auditor) maskToken(token string) string {
+	masked := token
+	if len(masked) > 4 {
+		masked = masked[:4] + "****"
+	} else {
+		masked = "****"
+	}
+	return "token:" + masked
 }
 
 // mapAction maps HTTP method and response status to audit action.
