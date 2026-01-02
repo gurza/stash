@@ -762,15 +762,20 @@ func TestStore_ConcurrentCommits(t *testing.T) {
 			}(i)
 		}
 
-		// collect results - all should succeed (some may fail due to git conflicts, that's acceptable)
+		// collect results and count successes
+		var successCount int
 		for range numGoroutines {
-			<-done // drain channel, errors are acceptable due to git conflicts
+			if err := <-done; err == nil {
+				successCount++
+			}
 		}
+		assert.GreaterOrEqual(t, successCount, 1, "at least one commit should succeed")
+		t.Logf("concurrent commits: %d/%d succeeded", successCount, numGoroutines)
 
-		// verify at least some commits succeeded
+		// verify results match success count
 		result, readErr := store.ReadAll()
 		require.NoError(t, readErr)
-		assert.NotEmpty(t, result, "at least some commits should succeed")
+		assert.Len(t, result, successCount, "stored keys should match successful commits")
 	})
 }
 

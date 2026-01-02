@@ -186,9 +186,22 @@ func (s *Store) createNewRepo() error {
 	return nil
 }
 
+// writeKeyFile writes key value to file and returns the relative path for staging.
+func (s *Store) writeKeyFile(key string, value []byte) (string, error) {
+	filePath := keyToPath(key)
+	fullPath := filepath.Join(s.cfg.Path, filePath)
+
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
+		return "", fmt.Errorf("failed to create directory: %w", err)
+	}
+	if err := os.WriteFile(fullPath, value, 0o600); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+	return filePath, nil
+}
+
 // Commit writes key-value to file and commits to git.
 func (s *Store) Commit(req CommitRequest) error {
-	// validate key before any file operations
 	if err := s.validateKey(req.Key); err != nil {
 		return err
 	}
@@ -198,27 +211,16 @@ func (s *Store) Commit(req CommitRequest) error {
 
 	now := time.Now()
 
-	// default format to text
 	format := req.Format
 	if format == "" {
 		format = "text"
 	}
 
-	// convert key to file path with .val suffix
-	filePath := keyToPath(req.Key)
-	fullPath := filepath.Join(s.cfg.Path, filePath)
-
-	// ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+	filePath, err := s.writeKeyFile(req.Key, req.Value)
+	if err != nil {
+		return err
 	}
 
-	// write file
-	if err := os.WriteFile(fullPath, req.Value, 0o600); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
-	}
-
-	// stage file
 	wt, err := s.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
@@ -417,6 +419,10 @@ func (s *Store) Checkout(rev string) error {
 // ReadAll reads all key-value pairs from the repository with their formats.
 // Format is extracted from the commit message metadata of the last commit that modified each file.
 // If no format is found in the commit message, defaults to "text".
+//
+// Note: this function has O(n) git log queries where n is the number of files,
+// as getFileFormat opens a git log iterator for each file. This is acceptable
+// for restore operations which are infrequent admin commands.
 func (s *Store) ReadAll() (map[string]KeyValue, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

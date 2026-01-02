@@ -41,6 +41,14 @@ func TestService_Commit(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err)
+				switch {
+				case tc.commitErr != nil:
+					assert.Contains(t, err.Error(), "commit:")
+				case tc.pullErr != nil:
+					assert.Contains(t, err.Error(), "pull:")
+				case tc.pushErr != nil:
+					assert.Contains(t, err.Error(), "push:")
+				}
 				return
 			}
 			require.NoError(t, err)
@@ -98,6 +106,14 @@ func TestService_Delete(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err)
+				switch {
+				case tc.deleteErr != nil:
+					assert.Contains(t, err.Error(), "delete:")
+				case tc.pullErr != nil:
+					assert.Contains(t, err.Error(), "pull:")
+				case tc.pushErr != nil:
+					assert.Contains(t, err.Error(), "push:")
+				}
 				return
 			}
 			require.NoError(t, err)
