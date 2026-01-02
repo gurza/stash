@@ -11,9 +11,10 @@ import (
 	"time"
 
 	log "github.com/go-pkgz/lgr"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib" // postgresql driver
 	"github.com/jmoiron/sqlx"
-	_ "modernc.org/sqlite" // sqlite driver
+	"modernc.org/sqlite"
 
 	"github.com/umputun/stash/app/enum"
 )
@@ -469,15 +470,20 @@ func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	errStr := err.Error()
-	// sQLite
-	if strings.Contains(errStr, "UNIQUE constraint failed") {
-		return true
+
+	// postgresql: code 23505 = unique_violation
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
 	}
-	// postgreSQL
-	if strings.Contains(errStr, "duplicate key value") {
-		return true
+
+	// sqlite: SQLITE_CONSTRAINT_UNIQUE = 2067, SQLITE_CONSTRAINT_PRIMARYKEY = 1555
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		code := sqliteErr.Code()
+		return code == 2067 || code == 1555
 	}
+
 	return false
 }
 

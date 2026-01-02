@@ -247,23 +247,11 @@ func (h *Handler) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 	// check write permission for this specific key
 	username := h.getCurrentUser(r)
 	if !h.auth.CheckUserPermission(username, key, true) {
-		// re-render form with error message, retarget to modal content
-		w.Header().Set("HX-Retarget", "#modal-content")
-		w.Header().Set("HX-Reswap", "innerHTML")
-		data := templateData{
-			Key:      key,
-			Value:    valueStr,
-			Format:   format,
-			Formats:  h.validator.SupportedFormats(),
-			IsNew:    true,
-			Error:    "Access denied: you don't have write permission for this key prefix",
-			BaseURL:  h.baseURL,
-			CanWrite: false,
-			Username: username,
-		}
-		if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
-			log.Printf("[ERROR] failed to execute template: %v", err)
-		}
+		h.renderFormError(w, templateData{
+			Key: key, Value: valueStr, Format: format, Formats: h.validator.SupportedFormats(),
+			IsNew: true, Error: "Access denied: you don't have write permission for this key prefix",
+			BaseURL: h.baseURL, CanWrite: false, Username: username,
+		})
 		return
 	}
 
@@ -301,24 +289,11 @@ func (h *Handler) handleKeyCreate(w http.ResponseWriter, r *http.Request) {
 	force := r.FormValue("force") == "true"
 	if !force && !isBinary {
 		if err := h.validator.Validate(format, value); err != nil {
-			// re-render form with validation error
-			w.Header().Set("HX-Retarget", "#modal-content")
-			w.Header().Set("HX-Reswap", "innerHTML")
-			data := templateData{
-				Key:      key,
-				Value:    valueStr,
-				Format:   format,
-				Formats:  h.validator.SupportedFormats(),
-				IsNew:    true,
-				Error:    err.Error(),
-				CanForce: true,
-				BaseURL:  h.baseURL,
-				CanWrite: true,
-				Username: username,
-			}
-			if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
-				log.Printf("[ERROR] failed to execute template: %v", err)
-			}
+			h.renderFormError(w, templateData{
+				Key: key, Value: valueStr, Format: format, Formats: h.validator.SupportedFormats(),
+				IsNew: true, Error: err.Error(), CanForce: true,
+				BaseURL: h.baseURL, CanWrite: true, Username: username,
+			})
 			return
 		}
 	}
@@ -410,36 +385,10 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		var conflictErr *store.ConflictError
 		if errors.As(err, &conflictErr) {
-			// conflict detected - render form with server's current value
-			serverDisplayValue, _ := h.valueForDisplay(conflictErr.Info.CurrentValue)
-			w.Header().Set("HX-Retarget", "#modal-content")
-			w.Header().Set("HX-Reswap", "innerHTML")
-			modalWidth, textareaHeight := h.calculateModalDimensions(valueStr)
-			data := templateData{
-				Key:            key,
-				Value:          valueStr,
-				Format:         format,
-				Formats:        h.validator.SupportedFormats(),
-				IsBinary:       isBinary,
-				IsNew:          false,
-				BaseURL:        h.baseURL,
-				ModalWidth:     modalWidth,
-				TextareaHeight: textareaHeight,
-				CanWrite:       true,
-				Username:       username,
-				conflictData: conflictData{
-					Conflict:        true,
-					ServerValue:     serverDisplayValue,
-					ServerFormat:    conflictErr.Info.CurrentFormat,
-					ServerUpdatedAt: conflictErr.Info.CurrentVersion.UnixNano(),
-					UpdatedAt:       formUpdatedAt,
-				},
-			}
-			if tmplErr := h.tmpl.ExecuteTemplate(w, "form", data); tmplErr != nil {
-				log.Printf("[ERROR] failed to execute template: %v", tmplErr)
-			}
-			log.Printf("[WARN] conflict detected for key %q: form=%d, server=%d",
-				key, formUpdatedAt, conflictErr.Info.CurrentVersion.UnixNano())
+			h.renderConflictError(w, conflictErrorParams{
+				Key: key, Value: valueStr, Format: format, IsBinary: isBinary,
+				Username: username, FormUpdatedAt: formUpdatedAt, ConflictErr: conflictErr,
+			})
 			return
 		}
 		log.Printf("[ERROR] failed to set key: %v", err)
@@ -725,6 +674,50 @@ func (h *Handler) renderFormError(w http.ResponseWriter, data templateData) {
 	if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
 		log.Printf("[ERROR] failed to execute template: %v", err)
 	}
+}
+
+// conflictErrorParams holds parameters for rendering a conflict error form.
+type conflictErrorParams struct {
+	Key           string
+	Value         string
+	Format        string
+	IsBinary      bool
+	Username      string
+	FormUpdatedAt int64
+	ConflictErr   *store.ConflictError
+}
+
+// renderConflictError renders the form with conflict data when optimistic lock fails.
+func (h *Handler) renderConflictError(w http.ResponseWriter, p conflictErrorParams) {
+	serverDisplayValue, _ := h.valueForDisplay(p.ConflictErr.Info.CurrentValue)
+	w.Header().Set("HX-Retarget", "#modal-content")
+	w.Header().Set("HX-Reswap", "innerHTML")
+	modalWidth, textareaHeight := h.calculateModalDimensions(p.Value)
+	data := templateData{
+		Key:            p.Key,
+		Value:          p.Value,
+		Format:         p.Format,
+		Formats:        h.validator.SupportedFormats(),
+		IsBinary:       p.IsBinary,
+		IsNew:          false,
+		BaseURL:        h.baseURL,
+		ModalWidth:     modalWidth,
+		TextareaHeight: textareaHeight,
+		CanWrite:       true,
+		Username:       p.Username,
+		conflictData: conflictData{
+			Conflict:        true,
+			ServerValue:     serverDisplayValue,
+			ServerFormat:    p.ConflictErr.Info.CurrentFormat,
+			ServerUpdatedAt: p.ConflictErr.Info.CurrentVersion.UnixNano(),
+			UpdatedAt:       p.FormUpdatedAt,
+		},
+	}
+	if err := h.tmpl.ExecuteTemplate(w, "form", data); err != nil {
+		log.Printf("[ERROR] failed to execute template: %v", err)
+	}
+	log.Printf("[WARN] conflict detected for key %q: form=%d, server=%d",
+		p.Key, p.FormUpdatedAt, p.ConflictErr.Info.CurrentVersion.UnixNano())
 }
 
 // commitToGit commits a key change to git if git is enabled.
