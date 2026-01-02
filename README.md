@@ -2,6 +2,20 @@
 
 Lightweight key-value configuration service for centralized config management. Store application settings, feature flags, and shared configuration with a simple HTTP API and web UI. A minimal alternative to Consul KV or etcd for microservices and containerized applications that need a straightforward way to manage configuration without complex infrastructure. Not a secrets vault - see [Security Note](#security-note).
 
+## Why Stash?
+
+- **Single binary, zero dependencies** - Download and run. No cluster setup, no consensus protocols, no quorum requirements. SQLite works out of the box.
+- **Simple HTTP API** - GET/PUT/DELETE with curl or any HTTP client. Works from any language without SDKs.
+- **Built-in web UI** - View, edit, and manage configuration directly in the browser. No separate UI tool needed.
+- **Git versioning** - Full audit trail with point-in-time recovery. See who changed what and when, restore any previous state.
+- **Encrypted secrets** - Server-side encryption with NaCl secretbox + Argon2id for sensitive values.
+- **Zero-knowledge encryption** - Client-side encryption where the server never sees plaintext. Your secrets stay yours.
+- **Simple operations** - One process to monitor. No distributed system complexity. Perfect for small teams and single-node deployments.
+- **Scales when needed** - Start with SQLite, switch to PostgreSQL for high availability. Built-in caching for high-load scenarios.
+- **Client libraries** - Go, Python, TypeScript, and Java SDKs with full API support.
+
+Stash is ideal for teams that need centralized configuration without the operational overhead of running a distributed key-value store.
+
 ## Quick Start
 
 ```bash
