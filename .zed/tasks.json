@@ -1,31 +1,31 @@
 [
   {
     "label": "Run Server (default)",
-    "command": "./stash server --dbg",
+    "command": "go run app/main.go server --dbg",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": true
   },
   {
     "label": "Run Server (with auth)",
-    "command": "./stash server --dbg --auth.file=auth-private.yml --auth.hot-reload",
+    "command": "go run app/main.go server --dbg --auth.file=auth-private.yml --auth.hot-reload",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": true
   },
   {
     "label": "Run Server (with git)",
-    "command": "./stash server --dbg --git.enabled --git.path=/tmp/stash-git",
+    "command": "go run app/main.go server --dbg --git.enabled --git.path=/tmp/stash-git",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": true
   },
   {
     "label": "Run Server (with audit)",
-    "command": "./stash server --dbg --audit.enabled --auth.file=auth-private.yml",
+    "command": "go run app/main.go server --dbg --audit.enabled --auth.file=auth-private.yml",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": true
   },
   {
     "label": "Run Server (full)",
-    "command": "./stash server --dbg --auth.file=auth-private.yml --git.enabled --git.path=/tmp/stash-git --audit.enabled --secrets.key=test-secret-key-min-16-chars",
+    "command": "go run app/main.go server --dbg --auth.file=auth-private.yml --git.enabled --git.path=/tmp/stash-git --audit.enabled --secrets.key=test-secret-key-min-16-chars",
     "cwd": "$ZED_WORKTREE_ROOT",
     "use_new_terminal": true
   },
