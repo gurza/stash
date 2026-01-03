@@ -25,11 +25,33 @@ jobs:
       - name: install uv
         uses: astral-sh/setup-uv@v5
 
+      - name: get package version
+        id: version
+        working-directory: lib/stash-python
+        run: |
+          VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: $VERSION"
+
+      - name: check if version exists on pypi
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if curl -sf "https://pypi.org/pypi/stash-client/$VERSION/json" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version $VERSION already exists on PyPI, skipping publish"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version $VERSION not found on PyPI, will publish"
+          fi
+
       - name: build package
+        if: steps.check.outputs.exists == 'false'
         working-directory: lib/stash-python
         run: uv build
 
       - name: publish to pypi
+        if: steps.check.outputs.exists == 'false'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: lib/stash-python/dist/

@@ -23,15 +23,38 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      - name: get package version
+        id: version
+        working-directory: lib/stash-js
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: $VERSION"
+
+      - name: check if version exists on npm
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if npm view @umputun/stash-client@$VERSION version 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version $VERSION already exists on npm, skipping publish"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version $VERSION not found on npm, will publish"
+          fi
+
       - name: install dependencies
+        if: steps.check.outputs.exists == 'false'
         working-directory: lib/stash-js
         run: npm ci
 
       - name: build
+        if: steps.check.outputs.exists == 'false'
         working-directory: lib/stash-js
         run: npm run build
 
       - name: publish to npm
+        if: steps.check.outputs.exists == 'false'
         working-directory: lib/stash-js
         run: npm publish --provenance --access public
         env:
