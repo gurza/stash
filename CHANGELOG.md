@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.18.1] - 2026-01-03
+
+### Changed
+- Consolidated ZK crypto to single implementation in lib/stash (#57)
+- Extracted audit logger to separate file (5d4daa2)
+- Improved code quality in git package (ed80cf1)
+- Updated build configuration and Makefile (0d0214d, ea2fbcb, 5b29ae6)
+- Added "Why Stash?" section to README (9ad113e, f74b62b)
+- Removed [Unreleased] placeholder from changelog (d5b400e)
+
+### Fixed
+- Fixed ijhttp env flag in CLAUDE.md (#56)
+
 ## [0.18.0] - 2026-01-01
 
 ### Added
