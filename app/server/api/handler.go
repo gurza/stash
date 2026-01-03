@@ -25,6 +25,14 @@ import (
 //go:generate moq -out mocks/formatvalidator.go -pkg mocks -skip-ensure -fmt goimports . FormatValidator
 //go:generate moq -out mocks/gitservice.go -pkg mocks -skip-ensure -fmt goimports . GitService
 
+// Handler handles API requests for /kv/* endpoints.
+type Handler struct {
+	store           KVStore
+	auth            AuthProvider
+	formatValidator FormatValidator
+	git             GitService
+}
+
 // GitService defines the interface for git operations.
 type GitService interface {
 	Commit(req git.CommitRequest) error
@@ -53,14 +61,6 @@ type AuthProvider interface {
 // FormatValidator defines the interface for format validation.
 type FormatValidator interface {
 	IsValidFormat(format string) bool
-}
-
-// Handler handles API requests for /kv/* endpoints.
-type Handler struct {
-	store           KVStore
-	auth            AuthProvider
-	formatValidator FormatValidator
-	git             GitService
 }
 
 // New creates a new API handler.
