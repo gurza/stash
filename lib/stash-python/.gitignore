@@ -12,9 +12,10 @@ dist/
 .venv/
 venv/
 
-# testing
+# testing/linting
 .coverage
 .pytest_cache/
+.ruff_cache/
 htmlcov/
 
 # IDE
