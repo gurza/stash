@@ -60,6 +60,26 @@
     "cwd": "$ZED_WORKTREE_ROOT"
   },
   {
+    "label": "Test Python SDK",
+    "command": "make test-python-sdk",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Test JS SDK",
+    "command": "make test-js-sdk",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Test Java SDK",
+    "command": "make test-java-sdk",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Test All SDKs",
+    "command": "make test-all-sdks",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
     "label": "HTTP Requests (local)",
     "command": "docker run --rm --network host -v $(pwd):/workdir jetbrains/intellij-http-client -D -e local -v http-client.env.json requests.http",
     "cwd": "$ZED_WORKTREE_ROOT"
