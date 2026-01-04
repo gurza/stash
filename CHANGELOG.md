@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.19.0] - 2026-01-04
+
+### Added
+- Real-time key change subscriptions via Server-Sent Events (#58)
+  - `/kv/subscribe/{key}` for exact key, `/kv/subscribe/{prefix}/*` for prefix
+  - Events: create, update, delete with key and timestamp
+  - Auto-reconnection with exponential backoff
+- SSE subscription support in Python, TypeScript, and Java SDKs (#59)
+  - Python: `subscribe()`, `subscribe_prefix()`, `subscribe_all()` with context manager
+  - TypeScript: async iterator pattern with `for await (const event of sub)`
+  - Java: `Iterable<SubscriptionEvent>` with try-with-resources support
+  - All SDKs version bumped to 0.2.0
+
 ## [0.18.1] - 2026-01-03
 
 ### Changed
