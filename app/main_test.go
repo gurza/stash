@@ -2255,3 +2255,346 @@ tokens:
 	opts.Audit.Enabled = false
 	opts.Auth.File = ""
 }
+
+func TestIntegration_SSE(t *testing.T) {
+	tmpDir := t.TempDir()
+	opts.DB = filepath.Join(tmpDir, "test.db")
+	opts.Server.Address = "127.0.0.1:18503"
+	opts.Server.ReadTimeout = 5 * time.Second
+	opts.Auth.File = ""
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- runServer(ctx)
+	}()
+
+	waitForServer(t, "http://127.0.0.1:18503/ping")
+
+	client, err := stash.New("http://127.0.0.1:18503")
+	require.NoError(t, err)
+
+	t.Run("exact key subscription", func(t *testing.T) {
+		subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer subCancel()
+
+		sub, err := client.Subscribe(subCtx, "sse-test/key1")
+		require.NoError(t, err)
+		defer sub.Close()
+
+		// give subscription time to establish (200ms is robust for slow CI)
+		time.Sleep(200 * time.Millisecond)
+
+		// create key
+		require.NoError(t, client.Set(subCtx, "sse-test/key1", "value1"))
+
+		// receive event
+		select {
+		case ev := <-sub.Events():
+			assert.Equal(t, "sse-test/key1", ev.Key)
+			assert.Equal(t, "create", ev.Action)
+		case err := <-sub.Errors():
+			t.Fatalf("subscription error: %v", err)
+		case <-subCtx.Done():
+			t.Fatal("timeout waiting for SSE event")
+		}
+	})
+
+	t.Run("prefix subscription", func(t *testing.T) {
+		subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer subCancel()
+
+		sub, err := client.SubscribePrefix(subCtx, "sse-prefix")
+		require.NoError(t, err)
+		defer sub.Close()
+
+		time.Sleep(200 * time.Millisecond)
+
+		// create key under prefix
+		require.NoError(t, client.Set(subCtx, "sse-prefix/config/db", "postgres"))
+
+		select {
+		case ev := <-sub.Events():
+			assert.Equal(t, "sse-prefix/config/db", ev.Key)
+			assert.Equal(t, "create", ev.Action)
+		case err := <-sub.Errors():
+			t.Fatalf("subscription error: %v", err)
+		case <-subCtx.Done():
+			t.Fatal("timeout waiting for SSE event")
+		}
+	})
+
+	t.Run("update and delete events", func(t *testing.T) {
+		subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer subCancel()
+
+		// create key first
+		require.NoError(t, client.Set(subCtx, "sse-events/key", "initial"))
+
+		// subscribe
+		sub, err := client.Subscribe(subCtx, "sse-events/key")
+		require.NoError(t, err)
+		defer sub.Close()
+
+		time.Sleep(200 * time.Millisecond)
+
+		// update
+		require.NoError(t, client.Set(subCtx, "sse-events/key", "updated"))
+
+		select {
+		case ev := <-sub.Events():
+			assert.Equal(t, "sse-events/key", ev.Key)
+			assert.Equal(t, "update", ev.Action)
+		case err := <-sub.Errors():
+			t.Fatalf("subscription error: %v", err)
+		case <-subCtx.Done():
+			t.Fatal("timeout waiting for update event")
+		}
+
+		// delete
+		require.NoError(t, client.Delete(subCtx, "sse-events/key"))
+
+		select {
+		case ev := <-sub.Events():
+			assert.Equal(t, "sse-events/key", ev.Key)
+			assert.Equal(t, "delete", ev.Action)
+		case err := <-sub.Errors():
+			t.Fatalf("subscription error: %v", err)
+		case <-subCtx.Done():
+			t.Fatal("timeout waiting for delete event")
+		}
+	})
+
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down in time")
+	}
+}
+
+// TestIntegration_SSE_MultipleEvents tests that SSE connection stays open and receives multiple events.
+// Uses http.ResponseController to disable WriteTimeout for long-lived SSE connections.
+func TestIntegration_SSE_MultipleEvents(t *testing.T) {
+	tmpDir := t.TempDir()
+	opts.DB = filepath.Join(tmpDir, "test.db")
+	opts.Server.Address = "127.0.0.1:18504"
+	opts.Server.ReadTimeout = 5 * time.Second
+	opts.Auth.File = ""
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- runServer(ctx) }()
+	waitForServer(t, "http://127.0.0.1:18504/ping")
+
+	client, err := stash.New("http://127.0.0.1:18504")
+	require.NoError(t, err)
+
+	subCtx, subCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer subCancel()
+
+	sub, err := client.SubscribePrefix(subCtx, "sse-multi")
+	require.NoError(t, err)
+	defer sub.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	keys := []string{"sse-multi/key1", "sse-multi/key2", "sse-multi/key3"}
+	for _, key := range keys {
+		require.NoError(t, client.Set(subCtx, key, "value"))
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	// verify all create events received
+	for i := range keys {
+		select {
+		case ev := <-sub.Events():
+			assert.Equal(t, keys[i], ev.Key)
+			assert.Equal(t, "create", ev.Action)
+		case err := <-sub.Errors():
+			t.Fatalf("subscription error on event %d: %v", i, err)
+		case <-subCtx.Done():
+			t.Fatalf("timeout waiting for event %d", i)
+		}
+	}
+
+	// update all keys
+	for _, key := range keys {
+		require.NoError(t, client.Set(subCtx, key, "updated"))
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	// verify all update events received
+	for i := range keys {
+		select {
+		case ev := <-sub.Events():
+			assert.Equal(t, keys[i], ev.Key)
+			assert.Equal(t, "update", ev.Action)
+		case err := <-sub.Errors():
+			t.Fatalf("subscription error on update %d: %v", i, err)
+		case <-subCtx.Done():
+			t.Fatalf("timeout waiting for update event %d", i)
+		}
+	}
+
+	// delete all keys
+	for _, key := range keys {
+		require.NoError(t, client.Delete(subCtx, key))
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	// verify all delete events received
+	for i := range keys {
+		select {
+		case ev := <-sub.Events():
+			assert.Equal(t, keys[i], ev.Key)
+			assert.Equal(t, "delete", ev.Action)
+		case err := <-sub.Errors():
+			t.Fatalf("subscription error on delete %d: %v", i, err)
+		case <-subCtx.Done():
+			t.Fatalf("timeout waiting for delete event %d", i)
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down in time")
+	}
+}
+
+// TestIntegration_SSE_NoEventsForNonSubscribedKeys verifies that subscription filtering works correctly.
+func TestIntegration_SSE_NoEventsForNonSubscribedKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	opts.DB = filepath.Join(tmpDir, "test.db")
+	opts.Server.Address = "127.0.0.1:18505"
+	opts.Server.ReadTimeout = 5 * time.Second
+	opts.Auth.File = ""
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- runServer(ctx) }()
+	waitForServer(t, "http://127.0.0.1:18505/ping")
+
+	client, err := stash.New("http://127.0.0.1:18505")
+	require.NoError(t, err)
+
+	subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer subCancel()
+
+	// subscribe to specific key
+	sub, err := client.Subscribe(subCtx, "subscribed/key")
+	require.NoError(t, err)
+	defer sub.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	// create a DIFFERENT key (not subscribed)
+	require.NoError(t, client.Set(subCtx, "other/key", "value"))
+
+	// wait briefly - should NOT receive event
+	select {
+	case ev := <-sub.Events():
+		t.Fatalf("received unexpected event for non-subscribed key: %+v", ev)
+	case err := <-sub.Errors():
+		t.Fatalf("subscription error: %v", err)
+	case <-time.After(500 * time.Millisecond):
+		// expected - no event for non-subscribed key
+	}
+
+	// now create subscribed key - SHOULD receive event
+	require.NoError(t, client.Set(subCtx, "subscribed/key", "value"))
+
+	select {
+	case ev := <-sub.Events():
+		assert.Equal(t, "subscribed/key", ev.Key)
+		assert.Equal(t, "create", ev.Action)
+	case err := <-sub.Errors():
+		t.Fatalf("subscription error: %v", err)
+	case <-subCtx.Done():
+		t.Fatal("timeout waiting for subscribed key event")
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down in time")
+	}
+}
+
+// TestIntegration_SSE_AuthDenied verifies that subscription to unauthorized keys is rejected.
+func TestIntegration_SSE_AuthDenied(t *testing.T) {
+	tmpDir := t.TempDir()
+	opts.DB = filepath.Join(tmpDir, "test.db")
+	opts.Server.Address = "127.0.0.1:18506"
+	opts.Server.ReadTimeout = 5 * time.Second
+
+	// create auth config with scoped token
+	authContent := `tokens:
+  - token: scoped-token
+    permissions:
+      - prefix: "allowed/*"
+        access: rw
+`
+	authFile := filepath.Join(tmpDir, "auth.yml")
+	require.NoError(t, os.WriteFile(authFile, []byte(authContent), 0o600))
+	opts.Auth.File = authFile
+	opts.Auth.LoginTTL = time.Hour
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- runServer(ctx) }()
+	waitForServer(t, "http://127.0.0.1:18506/ping")
+
+	// client with scoped token
+	client, err := stash.New("http://127.0.0.1:18506", stash.WithToken("scoped-token"))
+	require.NoError(t, err)
+
+	subCtx, subCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer subCancel()
+
+	t.Run("subscribe to allowed key succeeds", func(t *testing.T) {
+		sub, err := client.Subscribe(subCtx, "allowed/config")
+		require.NoError(t, err)
+		sub.Close()
+	})
+
+	t.Run("subscribe to denied key fails", func(t *testing.T) {
+		sub, err := client.Subscribe(subCtx, "denied/secret")
+		require.NoError(t, err) // subscribe() returns without error, connection happens async
+		defer sub.Close()
+
+		// should receive error from connection (403 Forbidden)
+		select {
+		case err := <-sub.Errors():
+			require.Error(t, err, "expected error for denied subscription")
+			assert.Contains(t, err.Error(), "403")
+		case <-sub.Events():
+			t.Fatal("should not receive events for denied key")
+		case <-time.After(2 * time.Second):
+			t.Fatal("expected error for subscription to denied key")
+		}
+	})
+
+	cancel()
+	opts.Auth.File = "" // reset for other tests
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down in time")
+	}
+}
