@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
+from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote, urljoin
 
+import sseclient
 import urllib3
 
 from stash.errors import (
@@ -24,6 +29,85 @@ if TYPE_CHECKING:
 # defaults
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_RETRIES = 3
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionEvent:
+    """Immutable event from SSE subscription."""
+
+    key: str
+    action: str  # create, update, delete
+    timestamp: str
+
+
+class Subscription:
+    """SSE subscription with Pythonic iterator protocol and auto-reconnection."""
+
+    def __init__(self, url: str, headers: dict[str, str], connect_timeout: float):
+        """Create a new subscription.
+
+        Args:
+            url: SSE endpoint URL
+            headers: HTTP headers for the request
+            connect_timeout: Connection timeout in seconds (no read timeout for streaming)
+        """
+        self._url = url
+        self._headers = headers
+        # use connect-only timeout for SSE streaming (no total/read timeout)
+        self._pool = urllib3.PoolManager(timeout=urllib3.Timeout(connect=connect_timeout))
+        self._closed = threading.Event()
+
+    def __iter__(self) -> Iterator[SubscriptionEvent]:
+        """Allows: for event in subscription: ..."""
+        return self.events()
+
+    def events(self) -> Iterator[SubscriptionEvent]:
+        """Generate events with automatic reconnection.
+
+        Yields:
+            SubscriptionEvent for each key change
+
+        Reconnects automatically on connection failure with exponential backoff.
+        """
+        delay = 1.0  # 1s initial
+        while not self._closed.is_set():
+            response = None
+            try:
+                response = self._pool.request("GET", self._url, headers=self._headers, preload_content=False)
+                client = sseclient.SSEClient(response)
+                delay = 1.0  # reset on successful connection
+                for sse_event in client.events():
+                    if self._closed.is_set():
+                        break
+                    if sse_event.event == "change":
+                        try:
+                            data = json.loads(sse_event.data)
+                            yield SubscriptionEvent(key=data["key"], action=data["action"], timestamp=data["timestamp"])
+                        except (json.JSONDecodeError, KeyError, TypeError):
+                            continue  # skip malformed events
+            except Exception:
+                if self._closed.is_set():
+                    break
+                time.sleep(delay)
+                delay = min(delay * 2, 30.0)  # max 30s
+            finally:
+                if response is not None:
+                    response.release_conn()
+
+    def close(self) -> None:
+        """Terminate the subscription."""
+        self._closed.set()
+
+    def __enter__(self) -> Subscription:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
 
 
 class Client:
@@ -56,6 +140,7 @@ class Client:
         # normalize base URL
         self._base_url = base_url.rstrip("/")
         self._token = token
+        self._timeout = timeout
 
         # configure HTTP pool with retries
         self._pool = urllib3.PoolManager(
@@ -251,6 +336,58 @@ class Client:
         """
         resp = self._request("GET", "/ping")
         self._check_response(resp)
+
+    def subscribe(self, key: str) -> Subscription:
+        """Subscribe to changes for an exact key.
+
+        Args:
+            key: The exact key to monitor
+
+        Returns:
+            Subscription that yields SubscriptionEvent objects
+
+        Example:
+            with client.subscribe("app/config") as sub:
+                for event in sub:
+                    print(f"{event.action}: {event.key}")
+        """
+        if not key:
+            raise ValueError("key is required")
+        url = urljoin(self._base_url + "/", f"kv/subscribe/{quote(key, safe='/')}")
+        return Subscription(url, self._headers(), self._timeout)
+
+    def subscribe_prefix(self, prefix: str) -> Subscription:
+        """Subscribe to changes for all keys with a prefix.
+
+        Args:
+            prefix: The prefix to monitor (e.g., "app" matches "app/config", "app/db")
+
+        Returns:
+            Subscription that yields SubscriptionEvent objects
+
+        Example:
+            with client.subscribe_prefix("app") as sub:
+                for event in sub:
+                    print(f"{event.action}: {event.key}")
+        """
+        if not prefix:
+            raise ValueError("prefix is required")
+        url = urljoin(self._base_url + "/", f"kv/subscribe/{quote(prefix, safe='/')}/*")
+        return Subscription(url, self._headers(), self._timeout)
+
+    def subscribe_all(self) -> Subscription:
+        """Subscribe to changes for all keys.
+
+        Returns:
+            Subscription that yields SubscriptionEvent objects
+
+        Example:
+            with client.subscribe_all() as sub:
+                for event in sub:
+                    print(f"{event.action}: {event.key}")
+        """
+        url = urljoin(self._base_url + "/", "kv/subscribe/*")
+        return Subscription(url, self._headers(), self._timeout)
 
     def close(self) -> None:
         """Clear ZK passphrase from memory.

@@ -1,6 +1,6 @@
 [project]
 name = "stash-client"
-version = "0.1.1"
+version = "0.2.0"
 description = "Python client library for Stash - a simple key-value configuration service"
 readme = "README.md"
 license = "MIT"
@@ -25,6 +25,7 @@ dependencies = [
     "urllib3>=2.0",
     "cryptography>=41.0",
     "argon2-cffi>=23.0",
+    "sseclient-py>=1.8",
 ]
 
 [project.optional-dependencies]
