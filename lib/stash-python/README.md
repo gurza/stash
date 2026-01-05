@@ -146,6 +146,31 @@ with client.subscribe_all() as sub:
 
 Subscriptions automatically reconnect on connection failure with exponential backoff (1s initial, 30s max).
 
+### Async Usage
+
+The client is synchronous. For async applications, use `asyncio.to_thread()`:
+
+```python
+import asyncio
+from stash import Client
+
+async def main():
+    client = Client("http://localhost:8080")
+
+    # single async call
+    value = await asyncio.to_thread(client.get, "app/config")
+
+    # concurrent calls
+    val1, val2 = await asyncio.gather(
+        asyncio.to_thread(client.get, "key1"),
+        asyncio.to_thread(client.get, "key2"),
+    )
+
+asyncio.run(main())
+```
+
+Note: This uses a thread pool, not native async I/O. For config service usage, the difference is negligible.
+
 ### KeyInfo
 
 ```python
