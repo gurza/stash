@@ -135,7 +135,8 @@ func (s *Store) QueryAudit(ctx context.Context, q AuditQuery) ([]AuditEntry, int
 		limit = 10000 // default limit
 	}
 
-	selectQuery := s.adoptQuery("SELECT id, timestamp, action, key, actor, actor_type, result, ip, user_agent, value_size, request_id FROM audit_log" + whereClause + " ORDER BY timestamp DESC LIMIT ? OFFSET ?")
+	selectQuery := s.adoptQuery("SELECT id, timestamp, action, key, actor, actor_type, result, ip," +
+		" user_agent, value_size, request_id FROM audit_log" + whereClause + " ORDER BY timestamp DESC LIMIT ? OFFSET ?")
 	args = append(args, limit, q.Offset)
 
 	rows, err := s.db.QueryxContext(ctx, selectQuery, args...)

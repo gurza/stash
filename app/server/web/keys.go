@@ -192,7 +192,8 @@ func (h *Handler) handleKeyEdit(w http.ResponseWriter, r *http.Request) {
 
 	// block editing of ZK-encrypted keys (must use client library with passphrase)
 	if stash.IsZKEncrypted(value) {
-		h.renderError(w, "Cannot edit: this key is encrypted with zero-knowledge encryption. Use the client library with your passphrase to modify it.")
+		h.renderError(w, "Cannot edit: this key is encrypted with zero-knowledge encryption."+
+			" Use the client library with your passphrase to modify it.")
 		return
 	}
 
@@ -343,7 +344,8 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderFormError(w, templateData{
 			Key: key, Value: valueStr, Format: format, Formats: h.Validator.SupportedFormats(),
 			IsBinary: isBinary, IsNew: false, Error: "Access denied: you don't have write permission for this key",
-			BaseURL: h.BaseURL, ModalWidth: modalWidth, TextareaHeight: textareaHeight, CanWrite: false, Username: username,
+			BaseURL: h.BaseURL, ModalWidth: modalWidth, TextareaHeight: textareaHeight,
+			CanWrite: false, Username: username,
 		})
 		return
 	}
@@ -379,8 +381,10 @@ func (h *Handler) handleKeyUpdate(w http.ResponseWriter, r *http.Request) {
 			modalWidth, textareaHeight := h.calculateModalDimensions(valueStr)
 			h.renderFormError(w, templateData{
 				Key: key, Value: valueStr, Format: format, Formats: h.Validator.SupportedFormats(),
-				IsBinary: isBinary, IsNew: false, Error: "Secrets not configured: keys with 'secrets' in path require --secrets.key",
-				BaseURL: h.BaseURL, ModalWidth: modalWidth, TextareaHeight: textareaHeight, CanWrite: true, Username: username,
+				IsBinary: isBinary, IsNew: false,
+				Error:   "Secrets not configured: keys with 'secrets' in path require --secrets.key",
+				BaseURL: h.BaseURL, ModalWidth: modalWidth, TextareaHeight: textareaHeight,
+				CanWrite: true, Username: username,
 			})
 			return
 		}

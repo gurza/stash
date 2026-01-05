@@ -556,7 +556,9 @@ func (h *Handler) paginate(keys []keyWithPermission, page, pageSize int) paginat
 	if end > total {
 		end = total
 	}
-	return paginateResult{keys: keys[start:end], page: page, totalPages: totalPages, hasPrev: page > 1, hasNext: page < totalPages}
+	return paginateResult{
+		keys: keys[start:end], page: page, totalPages: totalPages, hasPrev: page > 1, hasNext: page < totalPages,
+	}
 }
 
 // filterKeysByPermission filters keys based on user permissions and wraps with write permission info.

@@ -55,16 +55,16 @@ type Service struct {
 // Returns nil if authFile is empty (authentication disabled).
 // sessionStore is required for persistent session storage.
 // hotReload enables watching the config file for changes.
-func New(authFile string, loginTTL time.Duration, hotReload bool, sessionStore SessionStore, validator ConfigValidator) (*Service, error) {
+func New(authFile string, loginTTL time.Duration, hotReload bool, sstore SessionStore, vldt ConfigValidator) (*Service, error) {
 	if authFile == "" {
 		return nil, nil //nolint:nilnil // nil auth means disabled, not an error
 	}
 
-	if sessionStore == nil {
+	if sstore == nil {
 		return nil, errors.New("session store is required")
 	}
 
-	cfg, err := LoadConfig(authFile, validator)
+	cfg, err := LoadConfig(authFile, vldt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load auth config: %w", err)
 	}
@@ -92,8 +92,8 @@ func New(authFile string, loginTTL time.Duration, hotReload bool, sessionStore S
 		users:           users,
 		tokens:          tokens,
 		publicACL:       publicACL,
-		sessionStore:    sessionStore,
-		validator:       validator,
+		sessionStore:    sstore,
+		validator:       vldt,
 		loginTTL:        loginTTL,
 		cleanupInterval: defaultSessionCleanupInterval,
 		hotReload:       hotReload,

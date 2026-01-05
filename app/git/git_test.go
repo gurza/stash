@@ -66,8 +66,10 @@ func TestStore_Commit(t *testing.T) {
 		store, err := New(Config{Path: filepath.Join(tmpDir, ".history")})
 		require.NoError(t, err)
 
-		req := CommitRequest{Key: "app/config/db", Value: []byte("postgres://localhost/db"),
-			Operation: "set", Author: DefaultAuthor()}
+		req := CommitRequest{
+			Key: "app/config/db", Value: []byte("postgres://localhost/db"),
+			Operation: "set", Author: DefaultAuthor(),
+		}
 		require.NoError(t, store.Commit(req))
 
 		// verify file exists
@@ -82,8 +84,10 @@ func TestStore_Commit(t *testing.T) {
 		store, err := New(Config{Path: filepath.Join(tmpDir, ".history")})
 		require.NoError(t, err)
 
-		req := CommitRequest{Key: "deep/nested/path/key", Value: []byte("value"),
-			Operation: "set", Author: DefaultAuthor()}
+		req := CommitRequest{
+			Key: "deep/nested/path/key", Value: []byte("value"),
+			Operation: "set", Author: DefaultAuthor(),
+		}
 		require.NoError(t, store.Commit(req))
 
 		valFile := filepath.Join(store.cfg.Path, "deep", "nested", "path", "key.val")
@@ -98,7 +102,10 @@ func TestStore_Commit(t *testing.T) {
 		require.NoError(t, err)
 
 		binary := []byte{0x00, 0x01, 0xFF, 0xFE}
-		err = store.Commit(CommitRequest{Key: "binary/key", Value: binary, Operation: "set", Author: DefaultAuthor()})
+		err = store.Commit(CommitRequest{
+			Key: "binary/key", Value: binary,
+			Operation: "set", Author: DefaultAuthor(),
+		})
 		require.NoError(t, err)
 
 		valFile := filepath.Join(store.cfg.Path, "binary", "key.val")
@@ -115,7 +122,10 @@ func TestStore_Delete(t *testing.T) {
 		require.NoError(t, err)
 
 		// create key first
-		err = store.Commit(CommitRequest{Key: "app/config/db", Value: []byte("value"), Operation: "set", Author: DefaultAuthor()})
+		err = store.Commit(CommitRequest{
+			Key: "app/config/db", Value: []byte("value"),
+			Operation: "set", Author: DefaultAuthor(),
+		})
 		require.NoError(t, err)
 
 		// delete key
@@ -146,9 +156,18 @@ func TestStore_ReadAll(t *testing.T) {
 
 		// create multiple keys
 		author := DefaultAuthor()
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: author}))
-		require.NoError(t, store.Commit(CommitRequest{Key: "app/config/db", Value: []byte("postgres://"), Operation: "set", Author: author}))
-		require.NoError(t, store.Commit(CommitRequest{Key: "app/config/redis", Value: []byte("redis://"), Operation: "set", Author: author}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key1", Value: []byte("value1"),
+			Operation: "set", Author: author,
+		}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "app/config/db", Value: []byte("postgres://"),
+			Operation: "set", Author: author,
+		}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "app/config/redis", Value: []byte("redis://"),
+			Operation: "set", Author: author,
+		}))
 
 		// read all
 		result, err := store.ReadAll()
@@ -177,7 +196,10 @@ func TestStore_Checkout(t *testing.T) {
 		require.NoError(t, err)
 
 		// create first key
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key1", Value: []byte("value1"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		// get commit hash
 		head, err := store.repo.Head()
@@ -185,7 +207,10 @@ func TestStore_Checkout(t *testing.T) {
 		commitHash := head.Hash().String()
 
 		// create second key
-		require.NoError(t, store.Commit(CommitRequest{Key: "key2", Value: []byte("value2"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key2", Value: []byte("value2"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		// checkout first commit
 		err = store.Checkout(commitHash)
@@ -213,12 +238,18 @@ func TestStore_Checkout(t *testing.T) {
 		require.NoError(t, err)
 
 		// create commit on master
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("v1"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key1", Value: []byte("v1"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		// create develop branch by reopening with different branch
 		store2, err := New(Config{Path: filepath.Join(tmpDir, ".history"), Branch: "develop"})
 		require.NoError(t, err)
-		require.NoError(t, store2.Commit(CommitRequest{Key: "key2", Value: []byte("v2"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store2.Commit(CommitRequest{
+			Key: "key2", Value: []byte("v2"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		// checkout back to master branch by name
 		err = store2.Checkout("master")
@@ -237,7 +268,10 @@ func TestStore_Checkout(t *testing.T) {
 		require.NoError(t, err)
 
 		// create a commit
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("v1"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key1", Value: []byte("v1"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		// get commit hash and create tag
 		head, err := store.repo.Head()
@@ -246,7 +280,10 @@ func TestStore_Checkout(t *testing.T) {
 		require.NoError(t, err)
 
 		// create another commit
-		require.NoError(t, store.Commit(CommitRequest{Key: "key2", Value: []byte("v2"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key2", Value: []byte("v2"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		// checkout tag
 		err = store.Checkout("v1.0.0")
@@ -532,7 +569,10 @@ func TestStore_BranchUsage(t *testing.T) {
 		require.NoError(t, err)
 
 		// commit a key
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key1", Value: []byte("value1"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		// verify HEAD is on the configured branch
 		head, err := store.repo.Head()
@@ -553,12 +593,18 @@ func TestStore_BranchUsage(t *testing.T) {
 		author := DefaultAuthor()
 		store1, err := New(Config{Path: repoPath, Branch: "master"})
 		require.NoError(t, err)
-		require.NoError(t, store1.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: author}))
+		require.NoError(t, store1.Commit(CommitRequest{
+			Key: "key1", Value: []byte("value1"),
+			Operation: "set", Author: author,
+		}))
 
 		// reopen with different branch
 		store2, err := New(Config{Path: repoPath, Branch: "develop"})
 		require.NoError(t, err)
-		require.NoError(t, store2.Commit(CommitRequest{Key: "key2", Value: []byte("value2"), Operation: "set", Author: author}))
+		require.NoError(t, store2.Commit(CommitRequest{
+			Key: "key2", Value: []byte("value2"),
+			Operation: "set", Author: author,
+		}))
 
 		// verify HEAD is on develop
 		head, err := store2.repo.Head()
@@ -574,7 +620,10 @@ func TestStore_Head(t *testing.T) {
 		require.NoError(t, err)
 
 		// make a commit
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key1", Value: []byte("value1"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 
 		hash, err := store.Head()
 		require.NoError(t, err)
@@ -588,12 +637,18 @@ func TestStore_Head(t *testing.T) {
 		require.NoError(t, err)
 
 		// initial commit
-		require.NoError(t, store.Commit(CommitRequest{Key: "key1", Value: []byte("value1"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key1", Value: []byte("value1"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 		hash1, err := store.Head()
 		require.NoError(t, err)
 
 		// second commit
-		require.NoError(t, store.Commit(CommitRequest{Key: "key2", Value: []byte("value2"), Operation: "set", Author: DefaultAuthor()}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key2", Value: []byte("value2"),
+			Operation: "set", Author: DefaultAuthor(),
+		}))
 		hash2, err := store.Head()
 		require.NoError(t, err)
 
@@ -644,9 +699,18 @@ func TestStore_History(t *testing.T) {
 
 		author := DefaultAuthor()
 		// create key with multiple updates
-		require.NoError(t, store.Commit(CommitRequest{Key: "app/config", Value: []byte("v1"), Operation: "set", Format: "text", Author: author}))
-		require.NoError(t, store.Commit(CommitRequest{Key: "app/config", Value: []byte("v2"), Operation: "set", Format: "json", Author: author}))
-		require.NoError(t, store.Commit(CommitRequest{Key: "app/config", Value: []byte("v3"), Operation: "set", Format: "yaml", Author: author}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "app/config", Value: []byte("v1"),
+			Operation: "set", Format: "text", Author: author,
+		}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "app/config", Value: []byte("v2"),
+			Operation: "set", Format: "json", Author: author,
+		}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "app/config", Value: []byte("v3"),
+			Operation: "set", Format: "yaml", Author: author,
+		}))
 
 		history, err := store.History("app/config", 0)
 		require.NoError(t, err)
@@ -673,7 +737,10 @@ func TestStore_History(t *testing.T) {
 
 		author := DefaultAuthor()
 		for i := range 10 {
-			require.NoError(t, store.Commit(CommitRequest{Key: "key", Value: fmt.Appendf(nil, "v%d", i), Operation: "set", Author: author}))
+			require.NoError(t, store.Commit(CommitRequest{
+				Key: "key", Value: fmt.Appendf(nil, "v%d", i),
+				Operation: "set", Author: author,
+			}))
 		}
 
 		history, err := store.History("key", 3)
@@ -786,14 +853,20 @@ func TestStore_GetRevision(t *testing.T) {
 		require.NoError(t, err)
 
 		author := DefaultAuthor()
-		require.NoError(t, store.Commit(CommitRequest{Key: "key", Value: []byte("v1"), Operation: "set", Format: "text", Author: author}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key", Value: []byte("v1"),
+			Operation: "set", Format: "text", Author: author,
+		}))
 
 		// get hash of first commit
 		head1, err := store.repo.Head()
 		require.NoError(t, err)
 		hash1 := head1.Hash().String()
 
-		require.NoError(t, store.Commit(CommitRequest{Key: "key", Value: []byte("v2"), Operation: "set", Format: "json", Author: author}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key", Value: []byte("v2"),
+			Operation: "set", Format: "json", Author: author,
+		}))
 
 		// get value at first revision
 		value, format, err := store.GetRevision("key", hash1)
@@ -808,7 +881,10 @@ func TestStore_GetRevision(t *testing.T) {
 		require.NoError(t, err)
 
 		author := DefaultAuthor()
-		require.NoError(t, store.Commit(CommitRequest{Key: "key", Value: []byte("v1"), Operation: "set", Format: "json", Author: author}))
+		require.NoError(t, store.Commit(CommitRequest{
+			Key: "key", Value: []byte("v1"),
+			Operation: "set", Format: "json", Author: author,
+		}))
 
 		head, err := store.repo.Head()
 		require.NoError(t, err)
