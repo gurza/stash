@@ -45,6 +45,9 @@ test-js-sdk:
 test-java-sdk:
 	cd lib/stash-java && JAVA_HOME=$(STASH_JAVA_HOME) ./gradlew test --no-daemon --console=plain
 
-test-all-sdks: test-python-sdk test-js-sdk test-java-sdk
+test-rust-sdk:
+	cd lib/stash-rust && cargo test --features zk
 
-.PHONY: build test lint docker run prep_site e2e-setup e2e e2e-ui test-python-sdk test-js-sdk test-java-sdk test-all-sdks
+test-all-sdks: test-python-sdk test-js-sdk test-java-sdk test-rust-sdk
+
+.PHONY: build test lint docker run prep_site e2e-setup e2e e2e-ui test-python-sdk test-js-sdk test-java-sdk test-rust-sdk test-all-sdks

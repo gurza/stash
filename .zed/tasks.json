@@ -75,6 +75,11 @@
     "cwd": "$ZED_WORKTREE_ROOT"
   },
   {
+    "label": "Test Rust SDK",
+    "command": "make test-rust-sdk",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
     "label": "Test All SDKs",
     "command": "make test-all-sdks",
     "cwd": "$ZED_WORKTREE_ROOT"
