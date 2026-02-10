@@ -7,7 +7,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.22.0
 	github.com/didip/tollbooth/v8 v8.0.1
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/go-git/go-git/v5 v5.16.4
+	github.com/go-git/go-git/v5 v5.16.5
 	github.com/go-pkgz/lcw/v2 v2.0.0
 	github.com/go-pkgz/lgr v0.12.1
 	github.com/go-pkgz/requester v0.4.0
