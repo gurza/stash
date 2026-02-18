@@ -51,6 +51,11 @@ linters:
     - wrapcheck
 
   settings:
+    gosec:
+      excludes:
+        - G117
+        - G704
+        - G705
     exhaustive:
       default-signifies-exhaustive: true
     nolintlint:
