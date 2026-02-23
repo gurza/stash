@@ -175,16 +175,22 @@ func TestService_Shutdown_WithActiveConnection(t *testing.T) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err)
 
-	// start connection in background (will block until context canceled or server shutdown)
-	connErr := make(chan error, 1)
+	// start connection in background, read from SSE stream (blocks until server closes)
+	connDone := make(chan struct{}, 1)
 	go func() {
+		defer func() { connDone <- struct{}{} }()
 		resp, doErr := http.DefaultClient.Do(req)
 		if doErr != nil {
-			connErr <- doErr
 			return
 		}
-		_ = resp.Body.Close()
-		connErr <- nil
+		defer resp.Body.Close()
+		// read blocks until server shuts down and closes the connection
+		buf := make([]byte, 1024)
+		for {
+			if _, readErr := resp.Body.Read(buf); readErr != nil {
+				return
+			}
+		}
 	}()
 
 	// give the connection time to establish
@@ -197,14 +203,12 @@ func TestService_Shutdown_WithActiveConnection(t *testing.T) {
 	err = svc.Shutdown(shutdownCtx)
 	require.NoError(t, err)
 
-	// cancel client context to trigger connection termination
-	cancel()
-
-	// wait for connection goroutine to complete and verify it was terminated
+	// verify connection goroutine completed (server closed the connection)
 	select {
-	case connResult := <-connErr:
-		require.Error(t, connResult, "connection should be terminated after shutdown")
+	case <-connDone:
+		// connection terminated after shutdown, as expected
 	case <-time.After(time.Second):
+		cancel() // clean up
 		t.Fatal("connection goroutine did not complete after shutdown")
 	}
 }

@@ -1,6 +1,4 @@
-## Important: Repository Mirroring
-
-**This project is primarily developed on GitLab.** The repository you are currently viewing might be a mirror. Please review the guidelines below based on where you are viewing this:
+The repository you are currently viewing might be a mirror. Please review the guidelines below based on where you are viewing this:
 
 | Platform | Role | Contributing Guidelines |
 | :--- | :--- | :--- |
@@ -14,19 +12,24 @@
 
 ---
 
+![heart](sponsors/heart.png "heart")
+[Github Sponsors Account](https://github.com/sponsors/j-modernc-org) /  j-modernc-org
+
 ### Enterprise Infrastructure Tier Sponsor
 
-[Tailscale](https://tailscale.com/)
+![tailscale](sponsors/tailscale.png "tailscale") [Tailscale](https://tailscale.com/)
 
 ### Startup / Small Business Tier Sponsor
 
-[<img src="sponsors/octoberswimmer.png">](http://www.octoberswimmer.com/)
+![octoberswimmer](sponsors/octoberswimmer.png "osctoberswimmer") [October Swimmer](https://www.octoberswimmer.com/)
 
 ---
 
-[The SQLite Drivers Benchmarks Game]
+![benchmarks](bench.png "benchmarks") [The SQLite Drivers Benchmarks Game]
 
 [The SQLite Drivers Benchmarks Game]: https://pkg.go.dev/modernc.org/sqlite-bench#readme-tl-dr-scorecard
+
+---
 
 Virtual Tables (vtab)
 ---------------------
