@@ -1,0 +1,4 @@
+ignore:
+  - "**/mocks/"
+  - "vendor/"
+  - "app/enum/"
