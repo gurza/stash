@@ -28,8 +28,8 @@ jobs:
 
       - name: build and test
         run: |
-          go test -timeout=3m -covermode=count -coverprofile=$GITHUB_WORKSPACE/profile.cov_tmp ./...
-          cat $GITHUB_WORKSPACE/profile.cov_tmp | grep -v -E "mocks|/enum/" > $GITHUB_WORKSPACE/profile.cov
+          go test -race -timeout=3m -covermode=atomic -coverprofile=$GITHUB_WORKSPACE/profile.cov_tmp ./...
+          grep -v -E "mocks|/enum/" $GITHUB_WORKSPACE/profile.cov_tmp > $GITHUB_WORKSPACE/profile.cov
         env:
           TZ: "America/Chicago"
 
