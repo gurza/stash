@@ -41,7 +41,7 @@ jobs:
       - name: upload coverage
         uses: codecov/codecov-action@v5
         with:
-          files: $GITHUB_WORKSPACE/profile.cov
+          files: ${{ github.workspace }}/profile.cov
           token: ${{ secrets.CODECOV_TOKEN }}
 
   python-sdk:
