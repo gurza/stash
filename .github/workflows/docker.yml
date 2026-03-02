@@ -58,11 +58,12 @@ jobs:
 
       - name: prepare build args
         id: prep
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          branch="${{ github.event.workflow_run.head_branch }}"
-          sha="${{ github.event.workflow_run.head_sha }}"
-          echo "branch=${branch}" >> $GITHUB_OUTPUT
-          echo "version=${branch}-${sha:0:7}-$(date +%Y%m%dT%H:%M:%S)" >> $GITHUB_OUTPUT
+          echo "branch=${HEAD_BRANCH}" >> $GITHUB_OUTPUT
+          echo "version=${HEAD_BRANCH}-${HEAD_SHA:0:7}-$(date +%Y%m%dT%H:%M:%S)" >> $GITHUB_OUTPUT
 
       - name: build and push to ghcr.io
         id: build-ghcr
@@ -169,13 +170,14 @@ jobs:
 
       - name: set docker tags
         id: tags
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          branch="${{ github.event.workflow_run.head_branch }}"
-          if [[ "$branch" == v* ]]; then
-            echo "tag=${branch}" >> $GITHUB_OUTPUT
+          if [[ "$HEAD_BRANCH" == v* ]]; then
+            echo "tag=${HEAD_BRANCH}" >> $GITHUB_OUTPUT
             echo "latest=true" >> $GITHUB_OUTPUT
           else
-            echo "tag=${branch}" >> $GITHUB_OUTPUT
+            echo "tag=${HEAD_BRANCH}" >> $GITHUB_OUTPUT
             echo "latest=false" >> $GITHUB_OUTPUT
           fi
 
