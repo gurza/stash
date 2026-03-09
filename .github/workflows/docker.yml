@@ -65,7 +65,7 @@ jobs:
 
       - name: build and push to ghcr.io
         id: build-ghcr
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -77,7 +77,7 @@ jobs:
 
       - name: build and push to Docker Hub
         id: build-dockerhub
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
